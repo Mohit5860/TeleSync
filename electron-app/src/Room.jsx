@@ -11,8 +11,8 @@ function Room() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [sharingScreen, setSharingScreen] = useState(false);
-  const [micOn, setMicOn] = useState(false);
-  const [videoOn, setVideoOn] = useState(false);
+  const [micOn, setMicOn] = useState(true);
+  const [videoOn, setVideoOn] = useState(true);
 
   const messageContainerRef = useRef(null);
   const peersRef = useRef({});
@@ -49,6 +49,7 @@ function Room() {
           console.log("Host joined:", data.username);
           setHost({ username: data.username, id: data.user_id });
           setUser({ username: data.username, id: data.user_id });
+          handleHost();
           break;
 
         case "join-request":
@@ -78,24 +79,14 @@ function Room() {
           handleUser(data.host_id, data.user_id, data.participants);
           break;
 
-        case "screen-share-start":
-          if (screenVideoRef.current) {
-            screenVideoRef.current.srcObject = new MediaStream(data.stream);
-          }
-          break;
-
-        case "screen-share-stop":
-          if (screenVideoRef.current) {
-            screenVideoRef.current.srcObject = null;
-          }
-          break;
-
         case "offer":
           handleScreenShareOffer(data.item, data.from, data.user_id);
+          console.log("offer");
           break;
 
         case "answer":
           handleScreenShareAnswer(data.item, data.from);
+          console.log("answer");
           break;
 
         case "ice-candidate":
@@ -104,6 +95,7 @@ function Room() {
               new RTCIceCandidate(data.item)
             );
           }
+          console.log("ice-candidate");
           break;
 
         case "mouse-move":
@@ -145,6 +137,19 @@ function Room() {
     }
   };
 
+  const handleHost = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: micOn,
+        video: videoOn,
+      });
+
+      localVideoRef.current = stream;
+    } catch (err) {
+      console.error("Error while getting host media: ".err);
+    }
+  };
+
   const acceptJoinRequest = (request) => {
     sendMessage("request-accepted", {
       username: request.username,
@@ -169,8 +174,8 @@ function Room() {
   const handleUser = async (hostId, userId, participants) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: micOn,
         video: videoOn,
+        audio: micOn,
       });
 
       localVideoRef.current = stream;
@@ -180,17 +185,25 @@ function Room() {
         setPeerConnection(participant.id, userId);
       });
 
+      const offer = await peersRef.current[hostId].createOffer();
+      await peersRef.current[hostId].setLocalDescription(offer);
+      sendMessage("offer", {
+        item: offer,
+        user_id: userId,
+        to: hostId,
+      });
+
       for (let participant of participants) {
         const offer = await peersRef.current[participant.id].createOffer();
         await peersRef.current[participant.id].setLocalDescription(offer);
         sendMessage("offer", {
           item: offer,
-          user_id: user.id,
+          user_id: userId,
           to: participant.id,
         });
       }
     } catch (err) {
-      console.error("Error stating screen share:", err);
+      console.error("Error while forming webrtc connection:", err);
     }
   };
 
@@ -242,9 +255,9 @@ function Room() {
       setSharingScreen(true);
       setVideoOn(false);
 
-      Object.values(peersRef.current).forEach((peerConnection) => {
-        peerConnection.getSenders().forEach((sender) => {
-          if (sender.track.kind === "video") {
+      Object.values(peersRef.current).forEach((pc) => {
+        pc.getSenders().forEach((sender) => {
+          if (sender.kind.track === "video") {
             sender.replaceTrack(stream.getVideoTracks()[0]);
           }
         });
@@ -257,22 +270,20 @@ function Room() {
   const stopScreenSharing = async () => {
     try {
       if (localVideoRef.current) {
-        const tracks = localVideoRef.getTracks();
+        const tracks = localVideoRef.current.getVideoTracks();
         tracks.forEach((track) => track.stop());
       }
-
       setSharingScreen(false);
+      setVideoOn(true);
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: videoOn,
+      const stream = navigator.mediaDevices.getUserMedia({
+        video: true,
         audio: micOn,
       });
 
-      localVideoRef.current = stream;
-
-      Object.values(peersRef.current).forEach((peerConnection) => {
-        peerConnection.getSenders().forEach((sender) => {
-          if (sender.track.kind === "video") {
+      Object.values(peersRef.current).forEach((pc) => {
+        pc.getSenders().forEach((sender) => {
+          if (sender.kind.track === "video") {
             sender.replaceTrack(stream.getVideoTracks()[0]);
           }
         });
@@ -320,7 +331,7 @@ function Room() {
       Object.values(peersRef.current).forEach((peerConnection) => {
         peerConnection.getSenders().forEach((sender) => {
           if (sender.track.kind === "video") {
-            sender.replaceTrack(stream.getAudioTracks()[0]);
+            sender.replaceTrack(stream.getVideoTracks()[0]);
           } else if (sender.track.kind === "audio") {
             sender.replaceTrack(stream.getAudioTracks()[0]);
           }
@@ -332,7 +343,6 @@ function Room() {
   };
 
   const setPeerConnection = (participantId, id = user.id) => {
-    if (peersRef.current[participantId]) return;
     const peerConnection = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
@@ -348,6 +358,7 @@ function Room() {
     };
 
     peerConnection.ontrack = (event) => {
+      console.log("Received remote track:", event);
       const [remoteStream] = event.streams;
       addRemoteVideo(participantId, remoteStream);
     };
@@ -482,11 +493,11 @@ function Room() {
                   />
                 ) : (
                   (() => {
+                    console.log(remoteVideos);
                     const remote = remoteVideos.find(
-                      (r) => r.id.toString() === host.id.toString()
+                      (r) => r.id.$oid === host.id.$oid
                     );
-
-                    if (remote && remote.stream.getVideoTracks().length) {
+                    if (remote) {
                       return (
                         <video
                           autoPlay
@@ -512,7 +523,8 @@ function Room() {
                   className="w-1/3 my-2 h-full border bg-secondary-bg text-secondary-text flex justify-center items-center mx-2 rounded-lg"
                   key={participant.id}
                 >
-                  {sharingScreen || videoOn ? (
+                  {(sharingScreen || videoOn) &&
+                  user.id.toString() !== host.id.toString() ? (
                     <video
                       ref={(videoRef) => {
                         if (
@@ -530,7 +542,7 @@ function Room() {
                   ) : (
                     (() => {
                       const remote = remoteVideos.find(
-                        (r) => r.id.toString() === participant.id.toString()
+                        (r) => r.id.$oid === participant.id.$oid
                       );
 
                       if (remote && remote.stream.getVideoTracks().length) {
@@ -544,7 +556,6 @@ function Room() {
                               }
                             }}
                             className="w-full h-auto rounded-lg"
-                            onMouseMove={(e) => handleMouseMove(e, host.id)}
                           />
                         );
                       }
@@ -567,7 +578,7 @@ function Room() {
               className={`p-2 rounded-full  border border-input-border text-secondary-text`}
               onClick={toggleVideo}
             >
-              {sharingScreen ? "Video On" : "Video Off"}
+              {videoOn ? "Video On" : "Video Off"}
             </button>
             <button
               className={`p-2 rounded-full  border border-input-border text-secondary-text`}
