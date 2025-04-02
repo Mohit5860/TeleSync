@@ -13,6 +13,7 @@ function Room() {
   const [sharingScreen, setSharingScreen] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [videoOn, setVideoOn] = useState(true);
+  const [localStrem, setLocalStream] = useState(null);
 
   const messageContainerRef = useRef(null);
   const peersRef = useRef({});
@@ -145,6 +146,7 @@ function Room() {
       });
 
       localVideoRef.current = stream;
+      setLocalStream(stream);
     } catch (err) {
       console.error("Error while getting host media: ".err);
     }
@@ -182,7 +184,9 @@ function Room() {
       setPeerConnection(hostId, userId);
 
       participants.forEach((participant) => {
-        setPeerConnection(participant.id, userId);
+        if (participant.id.$oid !== userId) {
+          setPeerConnection(participant.id, userId);
+        }
       });
 
       const offer = await peersRef.current[hostId].createOffer();
@@ -230,10 +234,10 @@ function Room() {
     try {
       const sources = await getScreenSources();
 
-      let stream;
+      let videoStream;
 
       if (sources && sources.length > 0) {
-        stream = await navigator.mediaDevices.getUserMedia({
+        videoStream = await navigator.mediaDevices.getUserMedia({
           audio: false,
           video: {
             mandatory: {
@@ -244,24 +248,45 @@ function Room() {
         });
       }
 
+      const audioStream = await navigator.mediaDevices.getUserMedia({
+        audio: micOn,
+        video: false
+      });
+
+      const stream = new MediaStream();
+
+      videoStream.getVideoTracks().forEach(track => stream.addTrack(track));
+      audioStream.getAudioTracks().forEach(track => stream.addTrack(track));
+
+
       if (localVideoRef.current) {
         const videoTrack = localVideoRef.current.getVideoTracks()[0];
         if (videoTrack) {
           videoTrack.stop();
         }
       }
-
+  
       localVideoRef.current = stream;
       setSharingScreen(true);
       setVideoOn(false);
+      setLocalStream(stream);
 
-      Object.values(peersRef.current).forEach((pc) => {
-        pc.getSenders().forEach((sender) => {
-          if (sender.kind.track === "video") {
+     
+      Object.values(peersRef.current).forEach((peerConnection) => {
+      peerConnection.getSenders().forEach((sender) => {
+        if (sender.track.kind === "video") {
+          // Replace the video track with the new one, even when toggling it back on
+          if (stream.getVideoTracks().length > 0) {
             sender.replaceTrack(stream.getVideoTracks()[0]);
           }
-        });
+        } else if (sender.track.kind === "audio") {
+          // Replace the audio track
+          if (stream.getAudioTracks().length > 0) {
+            sender.replaceTrack(stream.getAudioTracks()[0]);
+          }
+        }
       });
+    });
     } catch (err) {
       console.error("Error stating screen share:", err);
     }
@@ -276,18 +301,29 @@ function Room() {
       setSharingScreen(false);
       setVideoOn(true);
 
-      const stream = navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
-        audio: micOn,
+        adio: micOn
       });
 
-      Object.values(peersRef.current).forEach((pc) => {
-        pc.getSenders().forEach((sender) => {
-          if (sender.kind.track === "video") {
+      localVideoRef.current = stream;
+      setLocalStream(stream);
+      
+      Object.values(peersRef.current).forEach((peerConnection) => {
+      peerConnection.getSenders().forEach((sender) => {
+        if (sender.track.kind === "video") {
+          // Replace the video track with the new one, even when toggling it back on
+          if (stream.getVideoTracks().length > 0) {
             sender.replaceTrack(stream.getVideoTracks()[0]);
           }
-        });
+        } else if (sender.track.kind === "audio") {
+          // Replace the audio track
+          if (stream.getAudioTracks().length > 0) {
+            sender.replaceTrack(stream.getAudioTracks()[0]);
+          }
+        }
       });
+    });
     } catch (err) {
       console.error("Error stoping screen share:", err);
     }
@@ -305,42 +341,104 @@ function Room() {
       localVideoRef.current = stream;
 
       Object.values(peersRef.current).forEach((peerConnection) => {
-        peerConnection.getSenders().forEach((sender) => {
-          if (sender.track.kind === "audio") {
+      peerConnection.getSenders().forEach((sender) => {
+        if (sender.track.kind === "video") {
+          // Replace the video track with the new one, even when toggling it back on
+          if (stream.getVideoTracks().length > 0) {
+            sender.replaceTrack(stream.getVideoTracks()[0]);
+          }
+        } else if (sender.track.kind === "audio") {
+          // Replace the audio track
+          if (stream.getAudioTracks().length > 0) {
             sender.replaceTrack(stream.getAudioTracks()[0]);
           }
-        });
+        }
       });
+    });
     } catch (err) {
       console.error("Error in toggling mic:", err);
     }
   };
 
-  const toggleVideo = async () => {
-    try {
-      setVideoOn((prev) => !prev);
-      setSharingScreen(false);
+  // const toggleVideo = async () => {
+  //   try {
+  //     if (localVideoRef.current) {
+  //       const tracks = localVideoRef.current.getVideoTracks();
+  //       tracks.forEach((track) => track.stop());
+  //     }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: !videoOn,
-        audio: micOn,
-      });
 
-      localVideoRef.current = stream;
+  //     const stream = await navigator.mediaDevices.getUserMedia({
+  //       video: !videoOn,
+  //       audio: micOn,
+  //     });
 
-      Object.values(peersRef.current).forEach((peerConnection) => {
-        peerConnection.getSenders().forEach((sender) => {
-          if (sender.track.kind === "video") {
+  //     localVideoRef.current = stream;
+  //     setLocalStream(stream);
+      
+  //     setSharingScreen(false);
+  //     setVideoOn((prev) => !prev);
+  //     Object.values(peersRef.current).forEach((peerConnection) => {
+  //       peerConnection.getSenders().forEach((sender) => {
+  //         if (sender.track.kind === "video") {
+  //           sender.replaceTrack(stream.getVideoTracks()[0]);
+  //         } else if (sender.track.kind === "audio") {
+  //           sender.replaceTrack(stream.getAudioTracks()[0]);
+  //         }
+  //       });
+  //     });
+  //   } catch (err) {
+  //     console.error("Error in toggling video:", err);
+  //   }
+  // };
+const toggleVideo = async () => {
+  try {
+    // Stop video tracks only when turning off the video
+    if (videoOn) {
+      const tracks = localVideoRef.current.getVideoTracks();
+      tracks.forEach((track) => track.stop());
+    }
+
+    // Get a new media stream with the updated video/audio settings
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: !videoOn, // Toggle video: true when turning on, false when turning off
+      audio: micOn,
+    });
+
+    // Update the local stream reference
+    localVideoRef.current = stream;
+    setLocalStream(stream);
+
+        setSharingScreen(false);
+    // Toggle the video state
+    setVideoOn((prev) => !prev);
+
+    // Update peer connections with the new video/audio tracks
+    Object.values(peersRef.current).forEach((peerConnection) => {
+      peerConnection.getSenders().forEach((sender) => {
+        if (sender.track.kind === "video") {
+          // Replace the video track with the new one, even when toggling it back on
+          if (stream.getVideoTracks().length > 0) {
             sender.replaceTrack(stream.getVideoTracks()[0]);
-          } else if (sender.track.kind === "audio") {
+          }
+        } else if (sender.track.kind === "audio") {
+          // Replace the audio track
+          if (stream.getAudioTracks().length > 0) {
             sender.replaceTrack(stream.getAudioTracks()[0]);
           }
-        });
+        }
       });
-    } catch (err) {
-      console.error("Error in toggling video:", err);
-    }
-  };
+    });
+
+    // Reset screen sharing flag if it was active
+
+
+  } catch (err) {
+    console.error("Error in toggling video:", err);
+  }
+};
+
+
 
   const setPeerConnection = (participantId, id = user.id) => {
     const peerConnection = new RTCPeerConnection({
@@ -363,6 +461,10 @@ function Room() {
       addRemoteVideo(participantId, remoteStream);
     };
 
+    peerConnection.onremovetrack = (event) => {
+      removeRemoteVideo(participantId);
+    }
+
     peersRef.current[participantId] = peerConnection;
 
     if (localVideoRef.current) {
@@ -375,12 +477,25 @@ function Room() {
   const addRemoteVideo = (id, remoteStream) => {
     setRemoteVideos((prevVideos) => {
       // Prevent duplicate entries
-      if (prevVideos.some((video) => video.id === id)) {
+      if (prevVideos.some((video) => video.id.$oid === id.$oid)) {
         return prevVideos;
       }
       return [...prevVideos, { id, stream: remoteStream }];
     });
   };
+
+  const removeRemoteVideo = (id) => {
+    setRemoteVideos((prevVideos) => {
+      const updatedVideos = prevVideos.filter((video) => video.id.$oid === id.$oid);
+
+      const videoToRemove = prevVideos.find((video) => video.id.$oid === id.$oid);
+      if(videoToRemove) {
+        videoToRemove.stream.getTracks().forEach((track) => track.stop());
+      }
+
+      return updatedVideos;
+    })
+  }
 
   const handleScreenShareOffer = async (offer, senderId, userId) => {
     setPeerConnection(senderId, userId);
@@ -476,13 +591,11 @@ function Room() {
           <div className="overflow-y-auto h-5/6 hide-scrollbar mx-1">
             <div className="h-2/3 mb-1">
               <div className="border bg-secondary-bg text-secondary-text flex justify-center items-center mx-2 h-full rounded-lg">
-                {sharingScreen || videoOn ? (
+                {(sharingScreen || videoOn ) && user.id.$oid === host.id.$oid ? (
                   <video
                     ref={(videoRef) => {
                       if (
-                        videoRef &&
-                        localVideoRef.current &&
-                        localVideoRef.current.getVideoTracks().length
+                        videoRef
                       ) {
                         videoRef.srcObject = localVideoRef.current;
                       }
@@ -524,13 +637,12 @@ function Room() {
                   key={participant.id}
                 >
                   {(sharingScreen || videoOn) &&
-                  user.id.toString() !== host.id.toString() ? (
+                  user.id.$oid !== host.id.$oid ? (
                     <video
                       ref={(videoRef) => {
                         if (
                           videoRef &&
-                          localVideoRef.current &&
-                          localVideoRef.current.getVideoTracks().length
+                          localVideoRef.current
                         ) {
                           videoRef.srcObject = localVideoRef.current;
                         }
