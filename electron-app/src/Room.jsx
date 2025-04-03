@@ -120,7 +120,7 @@ function Room() {
           break;
 
         case "video-started":
-          if (data.user_id.$oid === host.id.$oid) {
+          if (data.host) {
             setHost((prev) => (prev.video = true));
           } else {
             setParticipants((prev) => {
@@ -135,7 +135,7 @@ function Room() {
           break;
 
         case "video-stopped":
-          if (data.user_id.$oid === host.id.$oid) {
+          if (data.host) {
             setHost((prev) => (prev.video = false));
           } else {
             setParticipants((prev) => {
@@ -326,7 +326,11 @@ function Room() {
         });
       });
 
-      sendMessage("screen-sharing-started", { user_id: user.id, code });
+      sendMessage("screen-sharing-started", {
+        user_id: user.id,
+        code,
+        host: host.id.$oid === user.id.$oid,
+      });
     } catch (err) {
       console.error("Error stating screen share:", err);
     }
@@ -362,7 +366,11 @@ function Room() {
         });
       });
 
-      sendMessage("screen-sharing-stopped", { user_id: user.id, code });
+      sendMessage("screen-sharing-stopped", {
+        user_id: user.id,
+        code,
+        host: host.id.$oid === user.id.$oid,
+      });
     } catch (err) {
       console.error("Error stoping screen share:", err);
     }
@@ -407,9 +415,17 @@ function Room() {
       if (videoOn) {
         const tracks = localVideoRef.current.getVideoTracks();
         tracks.forEach((track) => track.stop());
-        sendMessage("video-stopped", { user_id: user.id, code });
+        sendMessage("video-stopped", {
+          user_id: user.id,
+          code,
+          host: host.id.$oid === user.id.$oid,
+        });
       } else {
-        sendMessage("video-started", { user_id: user.id, code });
+        sendMessage("video-started", {
+          user_id: user.id,
+          code,
+          host: host.id.$oid === user.id.$oid,
+        });
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({

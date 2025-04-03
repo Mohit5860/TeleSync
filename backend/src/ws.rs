@@ -119,12 +119,14 @@ struct MessageResponse {
 struct VideoData {
     user_id: ObjectId,
     code: String,
+    host: bool,
 }
 
 #[derive(Serialize)]
 struct VideoResponse {
     message_type: String,
     user_id: ObjectId,
+    host: bool,
 }
 
 pub async fn handler(ws: WebSocketUpgrade, State(state): State<SharedState>) -> Response {
@@ -529,6 +531,7 @@ async fn handle_rooms(
                                 let response: VideoResponse = VideoResponse {
                                     message_type: message_type.to_string(),
                                     user_id: data.user_id,
+                                    host: data.host,
                                 };
 
                                 let response_text = serde_json::to_string(&response).unwrap();
@@ -580,6 +583,7 @@ async fn handle_rooms(
                                 let response: VideoResponse = VideoResponse {
                                     message_type: message_type.to_string(),
                                     user_id: data.user_id,
+                                    host: data.host,
                                 };
 
                                 let response_text = serde_json::to_string(&response).unwrap();
