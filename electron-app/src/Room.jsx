@@ -121,7 +121,7 @@ function Room() {
 
         case "video-started":
           if (data.host) {
-            setHost((prev) => ({...prev, video: true}));
+            setHost((prev) => ({...prev, video: true, screen: false}));
           } else {
             setParticipants((prev) => {
               return prev.map((participant) => {
@@ -150,7 +150,7 @@ function Room() {
           break;
 
         case "screen-sharing-started":
-          setHost((prev) => ({...prev, screen:true}));
+          setHost((prev) => ({...prev, screen:true, video: false}));
           break;
 
         case "screen-sharing-stopped":
