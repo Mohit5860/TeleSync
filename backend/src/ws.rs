@@ -115,6 +115,18 @@ struct MessageResponse {
     id: ObjectId,
 }
 
+#[derive(Deserialize)]
+struct VideoData {
+    user_id: ObjectId,
+    code: String,
+}
+
+#[derive(Serialize)]
+struct VideoResponse {
+    message_type: String,
+    user_id: ObjectId,
+}
+
 pub async fn handler(ws: WebSocketUpgrade, State(state): State<SharedState>) -> Response {
     ws.on_upgrade(|socket| handle_socket(socket, state))
 }
@@ -495,6 +507,127 @@ async fn handle_rooms(
                                     }
                                 }
                             }
+                            "screen-sharing-started" | "screen-sharing-stopped" => {
+                                let data: VideoData =
+                                    match serde_json::from_value(json["data"].clone()) {
+                                        Ok(d) => d,
+                                        Err(_) => {
+                                            println!("err");
+                                            continue;
+                                        }
+                                    };
+
+                                let room: Room = match Database::get_room_by_code(
+                                    db.clone(),
+                                    &data.code,
+                                )
+                                .await
+                                {
+                                    Ok(Some(room)) => room,
+                                    _ => continue,
+                                };
+                                let response: VideoResponse = VideoResponse {
+                                    message_type: message_type.to_string(),
+                                    user_id: data.user_id,
+                                };
+
+                                let response_text = serde_json::to_string(&response).unwrap();
+
+                                let user_sockets = ws_state.user_sockets.lock().await.clone();
+
+                                for participant in &room.participants_id {
+                                    if let Some(sender_id) = user_sockets.get(&participant) {
+                                        let sender_arc = {
+                                            let sockets = ws_state.sockets.lock().await;
+                                            sockets.get(sender_id).cloned()
+                                        };
+
+                                        if let Some(sender_arc) = sender_arc {
+                                            let mut sender = sender_arc.lock().await;
+                                            if let Err(err) = sender
+                                                .send(Message::Text(response_text.clone().into()))
+                                                .await
+                                            {
+                                                eprintln!(
+                                                    "Failed to send message to user {}: {}",
+                                                    sender_id, err
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            "video-started" | "video-stopped" => {
+                                let data: VideoData =
+                                    match serde_json::from_value(json["data"].clone()) {
+                                        Ok(d) => d,
+                                        Err(_) => {
+                                            println!("err");
+                                            continue;
+                                        }
+                                    };
+
+                                let room: Room = match Database::get_room_by_code(
+                                    db.clone(),
+                                    &data.code,
+                                )
+                                .await
+                                {
+                                    Ok(Some(room)) => room,
+                                    _ => continue,
+                                };
+                                let response: VideoResponse = VideoResponse {
+                                    message_type: message_type.to_string(),
+                                    user_id: data.user_id,
+                                };
+
+                                let response_text = serde_json::to_string(&response).unwrap();
+
+                                let user_sockets = ws_state.user_sockets.lock().await.clone();
+
+                                for participant in &room.participants_id {
+                                    if let Some(sender_id) = user_sockets.get(&participant) {
+                                        let sender_arc = {
+                                            let sockets = ws_state.sockets.lock().await;
+                                            sockets.get(sender_id).cloned()
+                                        };
+
+                                        if let Some(sender_arc) = sender_arc {
+                                            let mut sender = sender_arc.lock().await;
+                                            if let Err(err) = sender
+                                                .send(Message::Text(response_text.clone().into()))
+                                                .await
+                                            {
+                                                eprintln!(
+                                                    "Failed to send message to user {}: {}",
+                                                    sender_id, err
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if let Some(sender_id) = user_sockets.get(&room.host_id) {
+                                    let sender_arc = {
+                                        let sockets = ws_state.sockets.lock().await;
+                                        sockets.get(sender_id).cloned()
+                                    };
+
+                                    if let Some(sender_arc) = sender_arc {
+                                        let mut sender = sender_arc.lock().await;
+                                        if let Err(err) =
+                                            sender.send(Message::Text(response_text.into())).await
+                                        {
+                                            eprintln!(
+                                                "Failed to send message to user {}: {}",
+                                                sender_id, err
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+
                             _ => continue,
                         }
                     }

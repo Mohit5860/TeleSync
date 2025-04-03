@@ -48,7 +48,12 @@ function Room() {
       switch (data.message_type) {
         case "host-joined":
           console.log("Host joined:", data.username);
-          setHost({ username: data.username, id: data.user_id });
+          setHost({
+            username: data.username,
+            id: data.user_id,
+            screen: true,
+            video: false,
+          });
           setUser({ username: data.username, id: data.user_id });
           handleHost();
           break;
@@ -65,7 +70,7 @@ function Room() {
           console.log("New participant:", data.username);
           setParticipants((prev) => [
             ...prev,
-            { username: data.username, id: data.user_id },
+            { username: data.username, id: data.user_id, video: true },
           ]);
           break;
 
@@ -74,7 +79,7 @@ function Room() {
           setUser({ username: data.username, id: data.user_id });
           setHost({ username: data.host_username, id: data.host_id });
           setParticipants(() => [
-            { username: data.username, id: data.user_id },
+            { username: data.username, id: data.user_id, video: true },
             ...data.participants,
           ]);
           handleUser(data.host_id, data.user_id, data.participants);
@@ -112,6 +117,44 @@ function Room() {
               id: data.id,
             },
           ]);
+          break;
+
+        case "video-started":
+          if (data.user_id.$oid === host.id.$oid) {
+            setHost((prev) => (prev.video = true));
+          } else {
+            setParticipants((prev) => {
+              prev.forEach((participant) => {
+                if (participant.id.$oid === data.user_id.$oid) {
+                  participant.video = true;
+                }
+              });
+              return prev;
+            });
+          }
+          break;
+
+        case "video-stopped":
+          if (data.user_id.$oid === host.id.$oid) {
+            setHost((prev) => (prev.video = false));
+          } else {
+            setParticipants((prev) => {
+              prev.forEach((participant) => {
+                if (participant.id.$oid === data.user_id.$oid) {
+                  participant.video = false;
+                }
+              });
+              return prev;
+            });
+          }
+          break;
+
+        case "screen-sharing-started":
+          setHost((prev) => (prev.screen = true));
+          break;
+
+        case "screen-sharing-stopped":
+          setHost((prev) => (prev.screen = false));
           break;
 
         default:
@@ -223,7 +266,6 @@ function Room() {
     try {
       const sources = await window.electronAPI.getSources(["window", "screen"]);
       console.log("Screen sources:", sources);
-      // Use the sources to populate a selection UI, for instance.
       return sources;
     } catch (error) {
       console.error("Error getting screen sources:", error);
@@ -250,14 +292,13 @@ function Room() {
 
       const audioStream = await navigator.mediaDevices.getUserMedia({
         audio: micOn,
-        video: false
+        video: false,
       });
 
       const stream = new MediaStream();
 
-      videoStream.getVideoTracks().forEach(track => stream.addTrack(track));
-      audioStream.getAudioTracks().forEach(track => stream.addTrack(track));
-
+      videoStream.getVideoTracks().forEach((track) => stream.addTrack(track));
+      audioStream.getAudioTracks().forEach((track) => stream.addTrack(track));
 
       if (localVideoRef.current) {
         const videoTrack = localVideoRef.current.getVideoTracks()[0];
@@ -265,28 +306,27 @@ function Room() {
           videoTrack.stop();
         }
       }
-  
+
       localVideoRef.current = stream;
       setSharingScreen(true);
       setVideoOn(false);
       setLocalStream(stream);
 
-     
       Object.values(peersRef.current).forEach((peerConnection) => {
-      peerConnection.getSenders().forEach((sender) => {
-        if (sender.track.kind === "video") {
-          // Replace the video track with the new one, even when toggling it back on
-          if (stream.getVideoTracks().length > 0) {
-            sender.replaceTrack(stream.getVideoTracks()[0]);
+        peerConnection.getSenders().forEach((sender) => {
+          if (sender.track.kind === "video") {
+            if (stream.getVideoTracks().length > 0) {
+              sender.replaceTrack(stream.getVideoTracks()[0]);
+            }
+          } else if (sender.track.kind === "audio") {
+            if (stream.getAudioTracks().length > 0) {
+              sender.replaceTrack(stream.getAudioTracks()[0]);
+            }
           }
-        } else if (sender.track.kind === "audio") {
-          // Replace the audio track
-          if (stream.getAudioTracks().length > 0) {
-            sender.replaceTrack(stream.getAudioTracks()[0]);
-          }
-        }
+        });
       });
-    });
+
+      sendMessage("screen-sharing-started", { user_id: user.id, code });
     } catch (err) {
       console.error("Error stating screen share:", err);
     }
@@ -299,31 +339,30 @@ function Room() {
         tracks.forEach((track) => track.stop());
       }
       setSharingScreen(false);
-      setVideoOn(true);
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        adio: micOn
+        video: videoOn,
+        adio: micOn,
       });
 
       localVideoRef.current = stream;
       setLocalStream(stream);
-      
+
       Object.values(peersRef.current).forEach((peerConnection) => {
-      peerConnection.getSenders().forEach((sender) => {
-        if (sender.track.kind === "video") {
-          // Replace the video track with the new one, even when toggling it back on
-          if (stream.getVideoTracks().length > 0) {
-            sender.replaceTrack(stream.getVideoTracks()[0]);
+        peerConnection.getSenders().forEach((sender) => {
+          if (sender.track.kind === "video") {
+            if (stream.getVideoTracks().length > 0) {
+              sender.replaceTrack(stream.getVideoTracks()[0]);
+            }
+          } else if (sender.track.kind === "audio") {
+            if (stream.getAudioTracks().length > 0) {
+              sender.replaceTrack(stream.getAudioTracks()[0]);
+            }
           }
-        } else if (sender.track.kind === "audio") {
-          // Replace the audio track
-          if (stream.getAudioTracks().length > 0) {
-            sender.replaceTrack(stream.getAudioTracks()[0]);
-          }
-        }
+        });
       });
-    });
+
+      sendMessage("screen-sharing-stopped", { user_id: user.id, code });
     } catch (err) {
       console.error("Error stoping screen share:", err);
     }
@@ -331,114 +370,76 @@ function Room() {
 
   const toggleMic = async () => {
     try {
-      setMicOn((prev) => !prev);
-
+      if (micOn) {
+        const tracks = localVideoRef.current.getAudioTracks();
+        tracks.forEach((track) => track.stop());
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: videoOn,
         audio: !micOn,
       });
 
+      setMicOn((prev) => !prev);
+
       localVideoRef.current = stream;
+      setLocalStream(stream);
 
       Object.values(peersRef.current).forEach((peerConnection) => {
-      peerConnection.getSenders().forEach((sender) => {
-        if (sender.track.kind === "video") {
-          // Replace the video track with the new one, even when toggling it back on
-          if (stream.getVideoTracks().length > 0) {
-            sender.replaceTrack(stream.getVideoTracks()[0]);
+        peerConnection.getSenders().forEach((sender) => {
+          if (sender.track.kind === "video") {
+            if (stream.getVideoTracks().length > 0) {
+              sender.replaceTrack(stream.getVideoTracks()[0]);
+            }
+          } else if (sender.track.kind === "audio") {
+            if (stream.getAudioTracks().length > 0) {
+              sender.replaceTrack(stream.getAudioTracks()[0]);
+            }
           }
-        } else if (sender.track.kind === "audio") {
-          // Replace the audio track
-          if (stream.getAudioTracks().length > 0) {
-            sender.replaceTrack(stream.getAudioTracks()[0]);
-          }
-        }
+        });
       });
-    });
     } catch (err) {
       console.error("Error in toggling mic:", err);
     }
   };
 
-  // const toggleVideo = async () => {
-  //   try {
-  //     if (localVideoRef.current) {
-  //       const tracks = localVideoRef.current.getVideoTracks();
-  //       tracks.forEach((track) => track.stop());
-  //     }
+  const toggleVideo = async () => {
+    try {
+      if (videoOn) {
+        const tracks = localVideoRef.current.getVideoTracks();
+        tracks.forEach((track) => track.stop());
+        sendMessage("video-stopped", { user_id: user.id, code });
+      } else {
+        sendMessage("video-started", { user_id: user.id, code });
+      }
 
-
-  //     const stream = await navigator.mediaDevices.getUserMedia({
-  //       video: !videoOn,
-  //       audio: micOn,
-  //     });
-
-  //     localVideoRef.current = stream;
-  //     setLocalStream(stream);
-      
-  //     setSharingScreen(false);
-  //     setVideoOn((prev) => !prev);
-  //     Object.values(peersRef.current).forEach((peerConnection) => {
-  //       peerConnection.getSenders().forEach((sender) => {
-  //         if (sender.track.kind === "video") {
-  //           sender.replaceTrack(stream.getVideoTracks()[0]);
-  //         } else if (sender.track.kind === "audio") {
-  //           sender.replaceTrack(stream.getAudioTracks()[0]);
-  //         }
-  //       });
-  //     });
-  //   } catch (err) {
-  //     console.error("Error in toggling video:", err);
-  //   }
-  // };
-const toggleVideo = async () => {
-  try {
-    // Stop video tracks only when turning off the video
-    if (videoOn) {
-      const tracks = localVideoRef.current.getVideoTracks();
-      tracks.forEach((track) => track.stop());
-    }
-
-    // Get a new media stream with the updated video/audio settings
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: !videoOn, // Toggle video: true when turning on, false when turning off
-      audio: micOn,
-    });
-
-    // Update the local stream reference
-    localVideoRef.current = stream;
-    setLocalStream(stream);
-
-        setSharingScreen(false);
-    // Toggle the video state
-    setVideoOn((prev) => !prev);
-
-    // Update peer connections with the new video/audio tracks
-    Object.values(peersRef.current).forEach((peerConnection) => {
-      peerConnection.getSenders().forEach((sender) => {
-        if (sender.track.kind === "video") {
-          // Replace the video track with the new one, even when toggling it back on
-          if (stream.getVideoTracks().length > 0) {
-            sender.replaceTrack(stream.getVideoTracks()[0]);
-          }
-        } else if (sender.track.kind === "audio") {
-          // Replace the audio track
-          if (stream.getAudioTracks().length > 0) {
-            sender.replaceTrack(stream.getAudioTracks()[0]);
-          }
-        }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: !videoOn,
+        audio: micOn,
       });
-    });
 
-    // Reset screen sharing flag if it was active
+      localVideoRef.current = stream;
+      setLocalStream(stream);
 
+      setSharingScreen(false);
+      setVideoOn((prev) => !prev);
 
-  } catch (err) {
-    console.error("Error in toggling video:", err);
-  }
-};
-
-
+      Object.values(peersRef.current).forEach((peerConnection) => {
+        peerConnection.getSenders().forEach((sender) => {
+          if (sender.track.kind === "video") {
+            if (stream.getVideoTracks().length > 0) {
+              sender.replaceTrack(stream.getVideoTracks()[0]);
+            }
+          } else if (sender.track.kind === "audio") {
+            if (stream.getAudioTracks().length > 0) {
+              sender.replaceTrack(stream.getAudioTracks()[0]);
+            }
+          }
+        });
+      });
+    } catch (err) {
+      console.error("Error in toggling video:", err);
+    }
+  };
 
   const setPeerConnection = (participantId, id = user.id) => {
     const peerConnection = new RTCPeerConnection({
@@ -463,7 +464,7 @@ const toggleVideo = async () => {
 
     peerConnection.onremovetrack = (event) => {
       removeRemoteVideo(participantId);
-    }
+    };
 
     peersRef.current[participantId] = peerConnection;
 
@@ -486,16 +487,20 @@ const toggleVideo = async () => {
 
   const removeRemoteVideo = (id) => {
     setRemoteVideos((prevVideos) => {
-      const updatedVideos = prevVideos.filter((video) => video.id.$oid === id.$oid);
+      const updatedVideos = prevVideos.filter(
+        (video) => video.id.$oid === id.$oid
+      );
 
-      const videoToRemove = prevVideos.find((video) => video.id.$oid === id.$oid);
-      if(videoToRemove) {
+      const videoToRemove = prevVideos.find(
+        (video) => video.id.$oid === id.$oid
+      );
+      if (videoToRemove) {
         videoToRemove.stream.getTracks().forEach((track) => track.stop());
       }
 
       return updatedVideos;
-    })
-  }
+    });
+  };
 
   const handleScreenShareOffer = async (offer, senderId, userId) => {
     setPeerConnection(senderId, userId);
@@ -534,7 +539,7 @@ const toggleVideo = async () => {
         id: user.id,
         code,
       });
-      setInput(""); // Clear input after sending
+      setInput("");
     }
   };
 
@@ -591,12 +596,10 @@ const toggleVideo = async () => {
           <div className="overflow-y-auto h-5/6 hide-scrollbar mx-1">
             <div className="h-2/3 mb-1">
               <div className="border bg-secondary-bg text-secondary-text flex justify-center items-center mx-2 h-full rounded-lg">
-                {(sharingScreen || videoOn ) && user.id.$oid === host.id.$oid ? (
+                {(sharingScreen || videoOn) && user.id.$oid === host.id.$oid ? (
                   <video
                     ref={(videoRef) => {
-                      if (
-                        videoRef
-                      ) {
+                      if (videoRef) {
                         videoRef.srcObject = localVideoRef.current;
                       }
                     }}
@@ -610,7 +613,22 @@ const toggleVideo = async () => {
                     const remote = remoteVideos.find(
                       (r) => r.id.$oid === host.id.$oid
                     );
-                    if (remote) {
+                    if (remote && (host.video || host.screen)) {
+                      if (host.screen) {
+                        return (
+                          <video
+                            autoPlay
+                            playsInline
+                            ref={(videoRef) => {
+                              if (videoRef) {
+                                videoRef.srcObject = remote.stream;
+                              }
+                            }}
+                            className="w-full h-auto rounded-lg"
+                            onMouseMove={(e) => handleMouseMove(e, host.id)}
+                          />
+                        );
+                      }
                       return (
                         <video
                           autoPlay
@@ -621,7 +639,6 @@ const toggleVideo = async () => {
                             }
                           }}
                           className="w-full h-auto rounded-lg"
-                          onMouseMove={(e) => handleMouseMove(e, host.id)}
                         />
                       );
                     }
@@ -640,10 +657,7 @@ const toggleVideo = async () => {
                   user.id.$oid !== host.id.$oid ? (
                     <video
                       ref={(videoRef) => {
-                        if (
-                          videoRef &&
-                          localVideoRef.current
-                        ) {
+                        if (videoRef && localVideoRef.current) {
                           videoRef.srcObject = localVideoRef.current;
                         }
                       }}
@@ -657,7 +671,11 @@ const toggleVideo = async () => {
                         (r) => r.id.$oid === participant.id.$oid
                       );
 
-                      if (remote && remote.stream.getVideoTracks().length) {
+                      if (
+                        remote &&
+                        remote.stream.getVideoTracks().length &&
+                        participant.video
+                      ) {
                         return (
                           <video
                             autoPlay
