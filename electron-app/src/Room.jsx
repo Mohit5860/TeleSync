@@ -77,7 +77,7 @@ function Room() {
         case "participant-joined":
           console.log("Participant joined:", data.username);
           setUser({ username: data.username, id: data.user_id });
-          setHost({ username: data.host_username, id: data.host_id });
+          setHost({ username: data.host_username, id: data.host_id, screen: true, video: false });
           setParticipants(() => [
             { username: data.username, id: data.user_id, video: true },
             ...data.participants,
@@ -121,40 +121,40 @@ function Room() {
 
         case "video-started":
           if (data.host) {
-            setHost((prev) => (prev.video = true));
+            setHost((prev) => ({...prev, video: true}));
           } else {
             setParticipants((prev) => {
-              prev.forEach((participant) => {
+              return prev.map((participant) => {
                 if (participant.id.$oid === data.user_id.$oid) {
-                  participant.video = true;
+                  return { ...participant, video: true };
                 }
+                return participant;
               });
-              return prev;
             });
           }
           break;
 
         case "video-stopped":
           if (data.host) {
-            setHost((prev) => (prev.video = false));
+            setHost((prev) => ({...prev, video: false}));
           } else {
             setParticipants((prev) => {
-              prev.forEach((participant) => {
+              return prev.map((participant) => {
                 if (participant.id.$oid === data.user_id.$oid) {
-                  participant.video = false;
+                  return { ...participant, video: false };
                 }
+                return participant;
               });
-              return prev;
             });
           }
           break;
 
         case "screen-sharing-started":
-          setHost((prev) => (prev.screen = true));
+          setHost((prev) => ({...prev, screen:true}));
           break;
 
         case "screen-sharing-stopped":
-          setHost((prev) => (prev.screen = false));
+          setHost((prev) => ({...prev, screen: false}));
           break;
 
         default:
@@ -206,7 +206,7 @@ function Room() {
     });
     setParticipants((prev) => [
       ...prev,
-      { username: request.username, id: request.id },
+      { username: request.username, id: request.id, video: true },
     ]);
     setJoinRequests((prev) => prev.filter((r) => r.id !== request.id));
   };
@@ -346,7 +346,7 @@ function Room() {
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: videoOn,
-        adio: micOn,
+        audio: micOn,
       });
 
       localVideoRef.current = stream;
