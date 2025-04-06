@@ -11,8 +11,8 @@ function Room() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [sharingScreen, setSharingScreen] = useState(false);
-  const [micOn, setMicOn] = useState(true);
-  const [videoOn, setVideoOn] = useState(true);
+  const [micOn, setMicOn] = useState(false);
+  const [videoOn, setVideoOn] = useState(false);
   const [localStrem, setLocalStream] = useState(null);
 
   const messageContainerRef = useRef(null);
@@ -55,7 +55,7 @@ function Room() {
             video: false,
           });
           setUser({ username: data.username, id: data.user_id });
-          handleHost();
+          //handleHost();
           break;
 
         case "join-request":
@@ -70,7 +70,7 @@ function Room() {
           console.log("New participant:", data.username);
           setParticipants((prev) => [
             ...prev,
-            { username: data.username, id: data.user_id, video: true },
+            { username: data.username, id: data.user_id, video: false },
           ]);
           break;
 
@@ -79,7 +79,7 @@ function Room() {
           setUser({ username: data.username, id: data.user_id });
           setHost({ username: data.host_username, id: data.host_id, screen: true, video: false });
           setParticipants(() => [
-            { username: data.username, id: data.user_id, video: true },
+            { username: data.username, id: data.user_id, video: false },
             ...data.participants,
           ]);
           handleUser(data.host_id, data.user_id, data.participants);
@@ -218,12 +218,6 @@ function Room() {
 
   const handleUser = async (hostId, userId, participants) => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: videoOn,
-        audio: micOn,
-      });
-
-      localVideoRef.current = stream;
       setPeerConnection(hostId, userId);
 
       participants.forEach((participant) => {
@@ -290,27 +284,28 @@ function Room() {
         });
       }
 
-      const audioStream = await navigator.mediaDevices.getUserMedia({
+            const stream = new MediaStream();
+
+
+      if (micOn) {
+        const audioStream = await navigator.mediaDevices.getUserMedia({
         audio: micOn,
         video: false,
       });
+      
+      audioStream.getAudioTracks().forEach((track) => stream.addTrack(track));
+      }
 
-      const stream = new MediaStream();
 
       videoStream.getVideoTracks().forEach((track) => stream.addTrack(track));
-      audioStream.getAudioTracks().forEach((track) => stream.addTrack(track));
 
       if (localVideoRef.current) {
         const videoTrack = localVideoRef.current.getVideoTracks()[0];
         if (videoTrack) {
           videoTrack.stop();
         }
-      }
 
-      localVideoRef.current = stream;
-      setSharingScreen(true);
-      setVideoOn(false);
-      setLocalStream(stream);
+        localVideoRef.current = stream;
 
       Object.values(peersRef.current).forEach((peerConnection) => {
         peerConnection.getSenders().forEach((sender) => {
@@ -325,6 +320,29 @@ function Room() {
           }
         });
       });
+      }else {
+        localVideoRef.current = stream;
+      participants.forEach((participant) => {
+        if (participant.id.$oid !== user.id.$oid) {
+          setPeerConnection(participant.id, user.id);
+        }
+      });
+
+      for (let participant of participants) {
+
+        const offer = await peersRef.current[participant.id].createOffer();
+        await peersRef.current[participant.id].setLocalDescription(offer);
+        sendMessage("offer", {
+          item: offer,
+          user_id: user.id,
+          to: participant.id,
+        });
+      } 
+      }
+      
+      setSharingScreen(true);
+      setVideoOn(false);
+      setLocalStream(stream);
 
       sendMessage("screen-sharing-started", {
         user_id: user.id,
@@ -344,6 +362,7 @@ function Room() {
       }
       setSharingScreen(false);
 
+      if (micOn || videoOn) {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: videoOn,
         audio: micOn,
@@ -365,6 +384,10 @@ function Room() {
           }
         });
       });
+      }else {
+        localVideoRef.current = null;
+        setLocalStream(null);
+      }
 
       sendMessage("screen-sharing-stopped", {
         user_id: user.id,
@@ -382,12 +405,11 @@ function Room() {
         const tracks = localVideoRef.current.getAudioTracks();
         tracks.forEach((track) => track.stop());
       }
-      const stream = await navigator.mediaDevices.getUserMedia({
+      if (videoOn) {
+        const stream = await navigator.mediaDevices.getUserMedia({
         video: videoOn,
         audio: !micOn,
       });
-
-      setMicOn((prev) => !prev);
 
       localVideoRef.current = stream;
       setLocalStream(stream);
@@ -405,39 +427,41 @@ function Room() {
           }
         });
       });
+      }else {
+        localVideoRef.current = null;
+        setLocalStream(null);
+      }
+
+      setMicOn((prev) => !prev);
     } catch (err) {
       console.error("Error in toggling mic:", err);
     }
   };
 
   const toggleVideo = async () => {
-    try {
-      if (videoOn) {
-        const tracks = localVideoRef.current.getVideoTracks();
-        tracks.forEach((track) => track.stop());
-        sendMessage("video-stopped", {
-          user_id: user.id,
-          code,
-          host: host.id.$oid === user.id.$oid,
-        });
-      } else {
-        sendMessage("video-started", {
-          user_id: user.id,
-          code,
-          host: host.id.$oid === user.id.$oid,
-        });
-      }
+    if (videoOn) {
+      stopVideo();
+    }else {
+      startVideo();
+    }
+  };
 
+
+  const startVideo = async () => {
+    try {
+      
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: !videoOn,
         audio: micOn,
+        video: true,
       });
 
-      localVideoRef.current = stream;
-      setLocalStream(stream);
+      if (localVideoRef.current) {
+        const videoTrack = localVideoRef.current.getVideoTracks()[0];
+        if (videoTrack) {
+          videoTrack.stop();
+        }
 
-      setSharingScreen(false);
-      setVideoOn((prev) => !prev);
+        localVideoRef.current = stream;
 
       Object.values(peersRef.current).forEach((peerConnection) => {
         peerConnection.getSenders().forEach((sender) => {
@@ -452,8 +476,98 @@ function Room() {
           }
         });
       });
+      }else {
+        localVideoRef.current = stream;
+
+        if (user.id.$oid !== host.id.$oid) {
+          setPeerConnection(host.id, user.id);
+          
+        const offer = await peersRef.current[host.id].createOffer();
+        await peersRef.current[host.id].setLocalDescription(offer);
+        sendMessage("offer", {
+          item: offer,
+          user_id: user.id,
+          to: host.id,
+        });
+        }
+
+      participants.forEach((participant) => {
+        if (participant.id.$oid !== user.id.$oid) {
+          setPeerConnection(participant.id, user.id);
+        }
+      });
+
+      for (let participant of participants) {
+        if (participant.id.$oid !== user.id.$oid) {
+          
+        const offer = await peersRef.current[participant.id].createOffer();
+        await peersRef.current[participant.id].setLocalDescription(offer);
+        sendMessage("offer", {
+          item: offer,
+          user_id: user.id,
+          to: participant.id,
+        });
+        }
+      } 
+      }
+      
+      setSharingScreen(false);
+      setVideoOn(true);
+      setLocalStream(stream);
+
+      sendMessage("video-started", {
+        user_id: user.id,
+        code,
+        host: host.id.$oid === user.id.$oid,
+      });
     } catch (err) {
-      console.error("Error in toggling video:", err);
+      console.err("Error while sarting video: ", err);
+    }
+  }
+
+
+  const stopVideo = async () => {
+    try {
+      if (localVideoRef.current) {
+        const tracks = localVideoRef.current.getVideoTracks();
+        tracks.forEach((track) => track.stop());
+      }
+      setVideoOn(false);
+
+      if (micOn) {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: false,
+        audio: micOn,
+      });
+
+      localVideoRef.current = stream;
+      setLocalStream(stream);
+
+      Object.values(peersRef.current).forEach((peerConnection) => {
+        peerConnection.getSenders().forEach((sender) => {
+          if (sender.track.kind === "video") {
+            if (stream.getVideoTracks().length > 0) {
+              sender.replaceTrack(stream.getVideoTracks()[0]);
+            }
+          } else if (sender.track.kind === "audio") {
+            if (stream.getAudioTracks().length > 0) {
+              sender.replaceTrack(stream.getAudioTracks()[0]);
+            }
+          }
+        });
+      });
+      }else {
+        localVideoRef.current = null;
+        setLocalStream(null);
+      }
+
+      sendMessage("video-stopped", {
+        user_id: user.id,
+        code,
+        host: host.id.$oid === user.id.$oid,
+      });
+    } catch (err) {
+      console.error("Error stoping screen share:", err);
     }
   };
 
@@ -494,9 +608,7 @@ function Room() {
   const addRemoteVideo = (id, remoteStream) => {
     setRemoteVideos((prevVideos) => {
       // Prevent duplicate entries
-      if (prevVideos.some((video) => video.id.$oid === id.$oid)) {
-        return prevVideos;
-      }
+      prevVideos = prevVideos.filter((video) => video.id.$oid !== id.$oid);
       return [...prevVideos, { id, stream: remoteStream }];
     });
   };
@@ -581,7 +693,7 @@ function Room() {
           </h1>
           <div>
             {joinRequests.map((request) => (
-              <div key={request.id}>
+              <div key={request.id.$oid}>
                 <h1 className="text-secondary-text">{request.username}</h1>
                 <button onClick={() => acceptJoinRequest(request)}>
                   Approve
@@ -597,7 +709,7 @@ function Room() {
             <div>
               {participants.map((participant) => (
                 <h3
-                  key={participant.id}
+                  key={participant.id.$oid}
                   className="font-medium text-secondary-text"
                 >
                   {participant.username}
@@ -667,10 +779,10 @@ function Room() {
               {participants.map((participant) => (
                 <div
                   className="w-1/3 my-2 h-full border bg-secondary-bg text-secondary-text flex justify-center items-center mx-2 rounded-lg"
-                  key={participant.id}
+                  key={participant.id.$oid}
                 >
                   {(sharingScreen || videoOn) &&
-                  user.id.$oid !== host.id.$oid ? (
+                  user.id.$oid !== host.id.$oid && user.id.$oid === participant.id.$oid ? (
                     <video
                       ref={(videoRef) => {
                         if (videoRef && localVideoRef.current) {
