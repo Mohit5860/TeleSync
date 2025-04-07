@@ -96,8 +96,8 @@ function Room() {
           break;
 
         case "ice-candidate":
-          if (peersRef.current[data.from]) {
-            peersRef.current[data.from].addIceCandidate(
+          if (peersRef.current[data.from.$oid]) {
+            peersRef.current[data.from.$oid].addIceCandidate(
               new RTCIceCandidate(data.item)
             );
           }
@@ -226,8 +226,8 @@ function Room() {
         }
       });
 
-      const offer = await peersRef.current[hostId].createOffer();
-      await peersRef.current[hostId].setLocalDescription(offer);
+      const offer = await peersRef.current[hostId.$oid].createOffer();
+      await peersRef.current[hostId.$oid].setLocalDescription(offer);
       sendMessage("offer", {
         item: offer,
         user_id: userId,
@@ -235,13 +235,16 @@ function Room() {
       });
 
       for (let participant of participants) {
-        const offer = await peersRef.current[participant.id].createOffer();
-        await peersRef.current[participant.id].setLocalDescription(offer);
+        if (participant.id.$oid !== userId.$oid) {
+          
+        const offer = await peersRef.current[participant.id.$oid].createOffer();
+        await peersRef.current[participant.id.$oid].setLocalDescription(offer);
         sendMessage("offer", {
           item: offer,
           user_id: userId,
           to: participant.id,
         });
+        }
       }
     } catch (err) {
       console.error("Error while forming webrtc connection:", err);
@@ -330,8 +333,8 @@ function Room() {
 
       for (let participant of participants) {
 
-        const offer = await peersRef.current[participant.id].createOffer();
-        await peersRef.current[participant.id].setLocalDescription(offer);
+        const offer = await peersRef.current[participant.id.$oid].createOffer();
+        await peersRef.current[participant.id.$oid].setLocalDescription(offer);
         sendMessage("offer", {
           item: offer,
           user_id: user.id,
@@ -482,8 +485,8 @@ function Room() {
         if (user.id.$oid !== host.id.$oid) {
           setPeerConnection(host.id, user.id);
           
-        const offer = await peersRef.current[host.id].createOffer();
-        await peersRef.current[host.id].setLocalDescription(offer);
+        const offer = await peersRef.current[host.id.$oid].createOffer();
+        await peersRef.current[host.id.$oid].setLocalDescription(offer);
         sendMessage("offer", {
           item: offer,
           user_id: user.id,
@@ -500,8 +503,8 @@ function Room() {
       for (let participant of participants) {
         if (participant.id.$oid !== user.id.$oid) {
           
-        const offer = await peersRef.current[participant.id].createOffer();
-        await peersRef.current[participant.id].setLocalDescription(offer);
+        const offer = await peersRef.current[participant.id.$oid].createOffer();
+        await peersRef.current[participant.id.$oid].setLocalDescription(offer);
         sendMessage("offer", {
           item: offer,
           user_id: user.id,
@@ -521,7 +524,7 @@ function Room() {
         host: host.id.$oid === user.id.$oid,
       });
     } catch (err) {
-      console.err("Error while sarting video: ", err);
+      console.error("Error while sarting video: ", err);
     }
   }
 
@@ -596,7 +599,7 @@ function Room() {
       removeRemoteVideo(participantId);
     };
 
-    peersRef.current[participantId] = peerConnection;
+    peersRef.current[participantId.$oid] = peerConnection;
 
     if (localVideoRef.current) {
       localVideoRef.current.getTracks().forEach((track) => {
@@ -632,17 +635,17 @@ function Room() {
 
   const handleScreenShareOffer = async (offer, senderId, userId) => {
     setPeerConnection(senderId, userId);
-    await peersRef.current[senderId].setRemoteDescription(
+    await peersRef.current[senderId.$oid].setRemoteDescription(
       new RTCSessionDescription(offer)
     );
 
-    const answer = await peersRef.current[senderId].createAnswer();
-    await peersRef.current[senderId].setLocalDescription(answer);
+    const answer = await peersRef.current[senderId.$oid].createAnswer();
+    await peersRef.current[senderId.$oid].setLocalDescription(answer);
     sendMessage("answer", { item: answer, user_id: userId, to: senderId });
   };
 
   const handleScreenShareAnswer = async (answer, senderId) => {
-    await peersRef.current[senderId].setRemoteDescription(
+    await peersRef.current[senderId.$oid].setRemoteDescription(
       new RTCSessionDescription(answer)
     );
   };
@@ -875,12 +878,12 @@ function Room() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                className="py-2 px-2 rounded-l-lg bg-secondary-bg text-input-text border border-input-border placeholder-input-placeholder focus:border-input-focus-border focus:text-input-focus-text focus:outline-none"
+                className="py-2 px-1 rounded-l-lg bg-secondary-bg text-input-text border border-input-border placeholder-input-placeholder focus:border-input-focus-border focus:text-input-focus-text focus:outline-none"
                 placeholder="Type a message..."
               />
               <button
                 onClick={handleSendMessage}
-                className="px-2 bg-secondary-bg border border-input-border text-message-text rounded-r-lg"
+                className="px-1 bg-secondary-bg border border-input-border text-message-text rounded-r-lg"
               >
                 Send
               </button>
