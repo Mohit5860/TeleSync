@@ -698,10 +698,10 @@ function Room() {
             {joinRequests.map((request) => (
               <div key={request.id.$oid}>
                 <h1 className="text-secondary-text">{request.username}</h1>
-                <button onClick={() => acceptJoinRequest(request)}>
+                <button className="text-secondary-text" onClick={() => acceptJoinRequest(request)}>
                   Approve
                 </button>
-                <button onClick={() => rejectJoinRequest(request)}>
+                <button className="text-secondary-text" onClick={() => rejectJoinRequest(request)}>
                   Reject
                 </button>
               </div>
