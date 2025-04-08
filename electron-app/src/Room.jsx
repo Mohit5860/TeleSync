@@ -13,7 +13,8 @@ function Room() {
   const [sharingScreen, setSharingScreen] = useState(false);
   const [micOn, setMicOn] = useState(false);
   const [videoOn, setVideoOn] = useState(false);
-  const [localStrem, setLocalStream] = useState(null);
+  const [localStream, setLocalStream] = useState(null);
+  const [messageOpen, setMessageOpen] = useState(true);
 
   const messageContainerRef = useRef(null);
   const peersRef = useRef({});
@@ -72,17 +73,17 @@ function Room() {
             ...prev,
             { username: data.username, id: data.user_id, video: false },
           ]);
+          handleUser(data.user_id, data.participant);
           break;
 
         case "participant-joined":
           console.log("Participant joined:", data.username);
           setUser({ username: data.username, id: data.user_id });
-          setHost({ username: data.host_username, id: data.host_id, screen: true, video: false });
+          setHost(data.host);
           setParticipants(() => [
             { username: data.username, id: data.user_id, video: false },
             ...data.participants,
           ]);
-          handleUser(data.host_id, data.user_id, data.participants);
           break;
 
         case "offer":
@@ -121,7 +122,7 @@ function Room() {
 
         case "video-started":
           if (data.host) {
-            setHost((prev) => ({...prev, video: true, screen: false}));
+            setHost((prev) => ({ ...prev, video: true, screen: false }));
           } else {
             setParticipants((prev) => {
               return prev.map((participant) => {
@@ -136,7 +137,7 @@ function Room() {
 
         case "video-stopped":
           if (data.host) {
-            setHost((prev) => ({...prev, video: false}));
+            setHost((prev) => ({ ...prev, video: false }));
           } else {
             setParticipants((prev) => {
               return prev.map((participant) => {
@@ -150,11 +151,11 @@ function Room() {
           break;
 
         case "screen-sharing-started":
-          setHost((prev) => ({...prev, screen:true, video: false}));
+          setHost((prev) => ({ ...prev, screen: true, video: false }));
           break;
 
         case "screen-sharing-stopped":
-          setHost((prev) => ({...prev, screen: false}));
+          setHost((prev) => ({ ...prev, screen: false }));
           break;
 
         default:
@@ -201,13 +202,8 @@ function Room() {
       user_id: request.id,
       participants,
       code,
-      host_username: host.username,
-      host_id: host.id,
+      host,
     });
-    setParticipants((prev) => [
-      ...prev,
-      { username: request.username, id: request.id, video: true },
-    ]);
     setJoinRequests((prev) => prev.filter((r) => r.id !== request.id));
   };
 
@@ -216,36 +212,17 @@ function Room() {
     setJoinRequests((prev) => prev.filter((r) => r.id !== request.id));
   };
 
-  const handleUser = async (hostId, userId, participants) => {
+  const handleUser = async (userId, id) => {
     try {
-      setPeerConnection(hostId, userId);
+      setPeerConnection(userId, id);
 
-      participants.forEach((participant) => {
-        if (participant.id.$oid !== userId) {
-          setPeerConnection(participant.id, userId);
-        }
-      });
-
-      const offer = await peersRef.current[hostId.$oid].createOffer();
-      await peersRef.current[hostId.$oid].setLocalDescription(offer);
+      const offer = await peersRef.current[userId.$oid].createOffer();
+      await peersRef.current[userId.$oid].setLocalDescription(offer);
       sendMessage("offer", {
         item: offer,
-        user_id: userId,
-        to: hostId,
+        user_id: id,
+        to: userId,
       });
-
-      for (let participant of participants) {
-        if (participant.id.$oid !== userId.$oid) {
-          
-        const offer = await peersRef.current[participant.id.$oid].createOffer();
-        await peersRef.current[participant.id.$oid].setLocalDescription(offer);
-        sendMessage("offer", {
-          item: offer,
-          user_id: userId,
-          to: participant.id,
-        });
-        }
-      }
     } catch (err) {
       console.error("Error while forming webrtc connection:", err);
     }
@@ -287,18 +264,16 @@ function Room() {
         });
       }
 
-            const stream = new MediaStream();
-
+      const stream = new MediaStream();
 
       if (micOn) {
         const audioStream = await navigator.mediaDevices.getUserMedia({
-        audio: micOn,
-        video: false,
-      });
-      
-      audioStream.getAudioTracks().forEach((track) => stream.addTrack(track));
-      }
+          audio: micOn,
+          video: false,
+        });
 
+        audioStream.getAudioTracks().forEach((track) => stream.addTrack(track));
+      }
 
       videoStream.getVideoTracks().forEach((track) => stream.addTrack(track));
 
@@ -310,39 +285,42 @@ function Room() {
 
         localVideoRef.current = stream;
 
-      Object.values(peersRef.current).forEach((peerConnection) => {
-        peerConnection.getSenders().forEach((sender) => {
-          if (sender.track.kind === "video") {
-            if (stream.getVideoTracks().length > 0) {
-              sender.replaceTrack(stream.getVideoTracks()[0]);
+        Object.values(peersRef.current).forEach((peerConnection) => {
+          peerConnection.getSenders().forEach((sender) => {
+            if (sender.track.kind === "video") {
+              if (stream.getVideoTracks().length > 0) {
+                sender.replaceTrack(stream.getVideoTracks()[0]);
+              }
+            } else if (sender.track.kind === "audio") {
+              if (stream.getAudioTracks().length > 0) {
+                sender.replaceTrack(stream.getAudioTracks()[0]);
+              }
             }
-          } else if (sender.track.kind === "audio") {
-            if (stream.getAudioTracks().length > 0) {
-              sender.replaceTrack(stream.getAudioTracks()[0]);
-            }
+          });
+        });
+      } else {
+        localVideoRef.current = stream;
+        participants.forEach((participant) => {
+          if (participant.id.$oid !== user.id.$oid) {
+            setPeerConnection(participant.id, user.id);
           }
         });
-      });
-      }else {
-        localVideoRef.current = stream;
-      participants.forEach((participant) => {
-        if (participant.id.$oid !== user.id.$oid) {
-          setPeerConnection(participant.id, user.id);
+
+        for (let participant of participants) {
+          const offer = await peersRef.current[
+            participant.id.$oid
+          ].createOffer();
+          await peersRef.current[participant.id.$oid].setLocalDescription(
+            offer
+          );
+          sendMessage("offer", {
+            item: offer,
+            user_id: user.id,
+            to: participant.id,
+          });
         }
-      });
-
-      for (let participant of participants) {
-
-        const offer = await peersRef.current[participant.id.$oid].createOffer();
-        await peersRef.current[participant.id.$oid].setLocalDescription(offer);
-        sendMessage("offer", {
-          item: offer,
-          user_id: user.id,
-          to: participant.id,
-        });
-      } 
       }
-      
+
       setSharingScreen(true);
       setVideoOn(false);
       setLocalStream(stream);
@@ -366,28 +344,28 @@ function Room() {
       setSharingScreen(false);
 
       if (micOn || videoOn) {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: videoOn,
-        audio: micOn,
-      });
-
-      localVideoRef.current = stream;
-      setLocalStream(stream);
-
-      Object.values(peersRef.current).forEach((peerConnection) => {
-        peerConnection.getSenders().forEach((sender) => {
-          if (sender.track.kind === "video") {
-            if (stream.getVideoTracks().length > 0) {
-              sender.replaceTrack(stream.getVideoTracks()[0]);
-            }
-          } else if (sender.track.kind === "audio") {
-            if (stream.getAudioTracks().length > 0) {
-              sender.replaceTrack(stream.getAudioTracks()[0]);
-            }
-          }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: videoOn,
+          audio: micOn,
         });
-      });
-      }else {
+
+        localVideoRef.current = stream;
+        setLocalStream(stream);
+
+        Object.values(peersRef.current).forEach((peerConnection) => {
+          peerConnection.getSenders().forEach((sender) => {
+            if (sender.track.kind === "video") {
+              if (stream.getVideoTracks().length > 0) {
+                sender.replaceTrack(stream.getVideoTracks()[0]);
+              }
+            } else if (sender.track.kind === "audio") {
+              if (stream.getAudioTracks().length > 0) {
+                sender.replaceTrack(stream.getAudioTracks()[0]);
+              }
+            }
+          });
+        });
+      } else {
         localVideoRef.current = null;
         setLocalStream(null);
       }
@@ -410,27 +388,27 @@ function Room() {
       }
       if (videoOn) {
         const stream = await navigator.mediaDevices.getUserMedia({
-        video: videoOn,
-        audio: !micOn,
-      });
-
-      localVideoRef.current = stream;
-      setLocalStream(stream);
-
-      Object.values(peersRef.current).forEach((peerConnection) => {
-        peerConnection.getSenders().forEach((sender) => {
-          if (sender.track.kind === "video") {
-            if (stream.getVideoTracks().length > 0) {
-              sender.replaceTrack(stream.getVideoTracks()[0]);
-            }
-          } else if (sender.track.kind === "audio") {
-            if (stream.getAudioTracks().length > 0) {
-              sender.replaceTrack(stream.getAudioTracks()[0]);
-            }
-          }
+          video: videoOn,
+          audio: !micOn,
         });
-      });
-      }else {
+
+        localVideoRef.current = stream;
+        setLocalStream(stream);
+
+        Object.values(peersRef.current).forEach((peerConnection) => {
+          peerConnection.getSenders().forEach((sender) => {
+            if (sender.track.kind === "video") {
+              if (stream.getVideoTracks().length > 0) {
+                sender.replaceTrack(stream.getVideoTracks()[0]);
+              }
+            } else if (sender.track.kind === "audio") {
+              if (stream.getAudioTracks().length > 0) {
+                sender.replaceTrack(stream.getAudioTracks()[0]);
+              }
+            }
+          });
+        });
+      } else {
         localVideoRef.current = null;
         setLocalStream(null);
       }
@@ -444,15 +422,13 @@ function Room() {
   const toggleVideo = async () => {
     if (videoOn) {
       stopVideo();
-    }else {
+    } else {
       startVideo();
     }
   };
 
-
   const startVideo = async () => {
     try {
-      
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: micOn,
         video: true,
@@ -466,54 +442,57 @@ function Room() {
 
         localVideoRef.current = stream;
 
-      Object.values(peersRef.current).forEach((peerConnection) => {
-        peerConnection.getSenders().forEach((sender) => {
-          if (sender.track.kind === "video") {
-            if (stream.getVideoTracks().length > 0) {
-              sender.replaceTrack(stream.getVideoTracks()[0]);
+        Object.values(peersRef.current).forEach((peerConnection) => {
+          peerConnection.getSenders().forEach((sender) => {
+            if (sender.track.kind === "video") {
+              if (stream.getVideoTracks().length > 0) {
+                sender.replaceTrack(stream.getVideoTracks()[0]);
+              }
+            } else if (sender.track.kind === "audio") {
+              if (stream.getAudioTracks().length > 0) {
+                sender.replaceTrack(stream.getAudioTracks()[0]);
+              }
             }
-          } else if (sender.track.kind === "audio") {
-            if (stream.getAudioTracks().length > 0) {
-              sender.replaceTrack(stream.getAudioTracks()[0]);
-            }
-          }
+          });
         });
-      });
-      }else {
+      } else {
         localVideoRef.current = stream;
 
         if (user.id.$oid !== host.id.$oid) {
           setPeerConnection(host.id, user.id);
-          
-        const offer = await peersRef.current[host.id.$oid].createOffer();
-        await peersRef.current[host.id.$oid].setLocalDescription(offer);
-        sendMessage("offer", {
-          item: offer,
-          user_id: user.id,
-          to: host.id,
-        });
+
+          const offer = await peersRef.current[host.id.$oid].createOffer();
+          await peersRef.current[host.id.$oid].setLocalDescription(offer);
+          sendMessage("offer", {
+            item: offer,
+            user_id: user.id,
+            to: host.id,
+          });
         }
 
-      participants.forEach((participant) => {
-        if (participant.id.$oid !== user.id.$oid) {
-          setPeerConnection(participant.id, user.id);
-        }
-      });
-
-      for (let participant of participants) {
-        if (participant.id.$oid !== user.id.$oid) {
-          
-        const offer = await peersRef.current[participant.id.$oid].createOffer();
-        await peersRef.current[participant.id.$oid].setLocalDescription(offer);
-        sendMessage("offer", {
-          item: offer,
-          user_id: user.id,
-          to: participant.id,
+        participants.forEach((participant) => {
+          if (participant.id.$oid !== user.id.$oid) {
+            setPeerConnection(participant.id, user.id);
+          }
         });
+
+        for (let participant of participants) {
+          if (participant.id.$oid !== user.id.$oid) {
+            const offer = await peersRef.current[
+              participant.id.$oid
+            ].createOffer();
+            await peersRef.current[participant.id.$oid].setLocalDescription(
+              offer
+            );
+            sendMessage("offer", {
+              item: offer,
+              user_id: user.id,
+              to: participant.id,
+            });
+          }
         }
-      } 
       }
-      
+
       setSharingScreen(false);
       setVideoOn(true);
       setLocalStream(stream);
@@ -526,8 +505,7 @@ function Room() {
     } catch (err) {
       console.error("Error while sarting video: ", err);
     }
-  }
-
+  };
 
   const stopVideo = async () => {
     try {
@@ -538,28 +516,28 @@ function Room() {
       setVideoOn(false);
 
       if (micOn) {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: false,
-        audio: micOn,
-      });
-
-      localVideoRef.current = stream;
-      setLocalStream(stream);
-
-      Object.values(peersRef.current).forEach((peerConnection) => {
-        peerConnection.getSenders().forEach((sender) => {
-          if (sender.track.kind === "video") {
-            if (stream.getVideoTracks().length > 0) {
-              sender.replaceTrack(stream.getVideoTracks()[0]);
-            }
-          } else if (sender.track.kind === "audio") {
-            if (stream.getAudioTracks().length > 0) {
-              sender.replaceTrack(stream.getAudioTracks()[0]);
-            }
-          }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: false,
+          audio: micOn,
         });
-      });
-      }else {
+
+        localVideoRef.current = stream;
+        setLocalStream(stream);
+
+        Object.values(peersRef.current).forEach((peerConnection) => {
+          peerConnection.getSenders().forEach((sender) => {
+            if (sender.track.kind === "video") {
+              if (stream.getVideoTracks().length > 0) {
+                sender.replaceTrack(stream.getVideoTracks()[0]);
+              }
+            } else if (sender.track.kind === "audio") {
+              if (stream.getAudioTracks().length > 0) {
+                sender.replaceTrack(stream.getAudioTracks()[0]);
+              }
+            }
+          });
+        });
+      } else {
         localVideoRef.current = null;
         setLocalStream(null);
       }
@@ -674,6 +652,10 @@ function Room() {
     }
   };
 
+  const toggleMessages = () => {
+    setMessageOpen((prev) => !prev);
+  };
+
   return user ? (
     <div className="bg-primary-bg h-screen w-screen overflow-hidden">
       {/* */}
@@ -690,7 +672,7 @@ function Room() {
 
       <div className="h-full flex">
         {/* Participants */}
-        <div className="w-1/6 p-4 bg-secondary-bg border rounded-lg shadow-lg h-[91%]">
+        <div className=" hidden flex-1 p-4 bg-secondary-bg border rounded-lg shadow-lg h-[91%] lg:block">
           <h1 className="text-secondary-text text-2xl font-bold mb-4 text-center">
             PARTICIPANTS
           </h1>
@@ -698,10 +680,16 @@ function Room() {
             {joinRequests.map((request) => (
               <div key={request.id.$oid}>
                 <h1 className="text-secondary-text">{request.username}</h1>
-                <button className="text-secondary-text" onClick={() => acceptJoinRequest(request)}>
+                <button
+                  className="text-secondary-text"
+                  onClick={() => acceptJoinRequest(request)}
+                >
                   Approve
                 </button>
-                <button className="text-secondary-text" onClick={() => rejectJoinRequest(request)}>
+                <button
+                  className="text-secondary-text"
+                  onClick={() => rejectJoinRequest(request)}
+                >
                   Reject
                 </button>
               </div>
@@ -721,9 +709,8 @@ function Room() {
             </div>
           )}
         </div>
-
         {/* Video Compartment */}
-        <div className="w-2/3 h-full">
+        <div className="flex-3 h-full">
           <div className="overflow-y-auto h-5/6 hide-scrollbar mx-1">
             <div className="h-2/3 mb-1">
               <div className="border bg-secondary-bg text-secondary-text flex justify-center items-center mx-2 h-full rounded-lg">
@@ -785,7 +772,8 @@ function Room() {
                   key={participant.id.$oid}
                 >
                   {(sharingScreen || videoOn) &&
-                  user.id.$oid !== host.id.$oid && user.id.$oid === participant.id.$oid ? (
+                  user.id.$oid !== host.id.$oid &&
+                  user.id.$oid === participant.id.$oid ? (
                     <video
                       ref={(videoRef) => {
                         if (videoRef && localVideoRef.current) {
@@ -829,12 +817,12 @@ function Room() {
           </div>
 
           <div className="flex justify-center items-center space-x-4 pt-3 rounded-lg">
-            <button
+            {/* <button
               className={`p-2 rounded-full  border border-input-border text-secondary-text`}
               onClick={toggleMic}
             >
               {micOn ? "Mic On" : "Mic Off"}
-            </button>
+            </button> */}
             <button
               className={`p-2 rounded-full  border border-input-border text-secondary-text`}
               onClick={toggleVideo}
@@ -847,11 +835,98 @@ function Room() {
             >
               {sharingScreen ? "Stop Screen Share" : "Screen Share"}
             </button>
+            <button
+              className={`p-2 rounded-full  border border-input-border text-secondary-text lg:hidden`}
+              onClick={toggleMessages}
+            >
+              {messageOpen ? "Participants" : "Messages"}
+            </button>
           </div>
         </div>
 
-        {/* Messages */}
-        <div className="w-1/6  rounded-lg">
+        <div className="lg:hidden flex-1 h-full">
+          {!messageOpen ? (
+            <div className="p-4 bg-secondary-bg border rounded-lg shadow-lg h-[91%]">
+              <h1 className="text-secondary-text text-2xl font-bold mb-4 text-center">
+                PARTICIPANTS
+              </h1>
+              <div>
+                {joinRequests.map((request) => (
+                  <div key={request.id.$oid}>
+                    <h1 className="text-secondary-text">{request.username}</h1>
+                    <button
+                      className="text-secondary-text"
+                      onClick={() => acceptJoinRequest(request)}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className="text-secondary-text"
+                      onClick={() => rejectJoinRequest(request)}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {participants.length > 0 && (
+                <div>
+                  {participants.map((participant) => (
+                    <h3
+                      key={participant.id.$oid}
+                      className="font-medium text-secondary-text"
+                    >
+                      {participant.username}
+                    </h3>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-lg h-full">
+              <h1 className="p-2 text-center font-bold text-secondary-text text-2xl bg-secondary-bg rounded-t-lg">
+                {" "}
+                MESSAGES{" "}
+              </h1>
+              <div className="flex flex-col h-[85%]">
+                <div
+                  ref={messageContainerRef}
+                  className="flex-grow p-2 overflow-y-auto mb-2 bg-secondary-bg rounded-b-lg"
+                >
+                  {messages.map((message) => (
+                    <div
+                      key={message.id}
+                      className="bg-message-bg p-2 m-2 rounded-lg"
+                    >
+                      <h3 className="text-secondary-text text-lg font-semibold">
+                        {message.username}
+                      </h3>
+                      <p className="text-message-text">{message.text}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex">
+                  <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    className="py-2 w-full px-1 rounded-l-lg bg-secondary-bg text-input-text border border-input-border placeholder-input-placeholder focus:border-input-focus-border focus:text-input-focus-text focus:outline-none"
+                    placeholder="Type a message..."
+                  />
+                  <button
+                    onClick={handleSendMessage}
+                    className=" px-1 bg-secondary-bg border border-input-border text-message-text rounded-r-lg"
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-lg flex-1 hidden lg:block">
           <h1 className="p-2 text-center font-bold text-secondary-text text-2xl bg-secondary-bg rounded-t-lg">
             {" "}
             MESSAGES{" "}
@@ -878,12 +953,12 @@ function Room() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                className="py-2 px-1 rounded-l-lg bg-secondary-bg text-input-text border border-input-border placeholder-input-placeholder focus:border-input-focus-border focus:text-input-focus-text focus:outline-none"
+                className="py-2 w-full px-1 rounded-l-lg bg-secondary-bg text-input-text border border-input-border placeholder-input-placeholder focus:border-input-focus-border focus:text-input-focus-text focus:outline-none"
                 placeholder="Type a message..."
               />
               <button
                 onClick={handleSendMessage}
-                className="px-1 bg-secondary-bg border border-input-border text-message-text rounded-r-lg"
+                className=" px-1 bg-secondary-bg border border-input-border text-message-text rounded-r-lg"
               >
                 Send
               </button>

@@ -48,6 +48,15 @@ struct JoinRoomResponse {
 struct Participant {
     username: String,
     id: ObjectId,
+    video: bool,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+struct Host {
+    username: String,
+    id: ObjectId,
+    video: bool,
+    screen: bool,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -56,8 +65,7 @@ struct RequestAcceptedData {
     user_id: ObjectId,
     participants: Vec<Participant>,
     code: String,
-    host_username: String,
-    host_id: ObjectId,
+    host: Host,
 }
 
 #[derive(Serialize)]
@@ -66,8 +74,16 @@ struct RequestAcceptedResponse {
     username: String,
     user_id: ObjectId,
     participants: Vec<Participant>,
-    host_username: String,
-    host_id: ObjectId,
+    host: Host,
+}
+
+#[derive(Serialize)]
+struct RequestAcceptedResponseTOParticipants {
+    message_type: String,
+    username: String,
+    user_id: ObjectId,
+    participant: ObjectId,
+    host: Host,
 }
 
 #[derive(Deserialize)]
@@ -286,17 +302,19 @@ async fn handle_rooms(
                                     continue;
                                 }
 
-                                let response_to_participants = JoinRoomResponse {
-                                    message_type: "new-participant".to_string(),
-                                    user_id: data.user_id,
-                                    username: data.username.clone(),
-                                };
-                                let response_to_participant_text =
-                                    serde_json::to_string(&response_to_participants).unwrap();
-
                                 let user_sockets = ws_state.user_sockets.lock().await.clone();
 
                                 for participant in &data.participants {
+                                    let response_to_participants =
+                                        RequestAcceptedResponseTOParticipants {
+                                            message_type: "new-participant".to_string(),
+                                            user_id: data.user_id,
+                                            username: data.username.clone(),
+                                            participant: participant.id,
+                                            host: data.host.clone(),
+                                        };
+                                    let response_to_participant_text =
+                                        serde_json::to_string(&response_to_participants).unwrap();
                                     if let Some(sender_id) = user_sockets.get(&participant.id) {
                                         let sender_arc = {
                                             let sockets = ws_state.sockets.lock().await;
@@ -321,13 +339,44 @@ async fn handle_rooms(
                                 }
                                 println!("response sent to participants");
 
+                                let response_to_host = RequestAcceptedResponseTOParticipants {
+                                    message_type: "new-participant".to_string(),
+                                    user_id: data.user_id,
+                                    username: data.username.clone(),
+                                    participant: data.host.id,
+                                    host: data.host.clone(),
+                                };
+                                let response_to_host_text =
+                                    serde_json::to_string(&response_to_host).unwrap();
+
+                                if let Some(sender_id) = user_sockets.get(&data.host.id) {
+                                    let sender_arc = {
+                                        let sockets = ws_state.sockets.lock().await;
+                                        sockets.get(sender_id).cloned()
+                                    };
+
+                                    if let Some(sender_arc) = sender_arc {
+                                        let mut sender = sender_arc.lock().await;
+                                        if let Err(err) = sender
+                                            .send(Message::Text(
+                                                response_to_host_text.clone().into(),
+                                            ))
+                                            .await
+                                        {
+                                            eprintln!(
+                                                "Failed to send message to user {}: {}",
+                                                sender_id, err
+                                            );
+                                        }
+                                    }
+                                }
+
                                 let response = RequestAcceptedResponse {
                                     message_type: "participant-joined".to_string(),
                                     user_id: data.user_id,
                                     username: data.username.clone(),
                                     participants: data.participants.clone(),
-                                    host_username: data.host_username.clone(),
-                                    host_id: data.host_id,
+                                    host: data.host.clone(),
                                 };
                                 let response_text = serde_json::to_string(&response).unwrap();
 
