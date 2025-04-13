@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import Cookies from "js-cookie";
 
 function Room() {
@@ -24,6 +24,8 @@ function Room() {
   const { code } = useParams();
   const access_token = Cookies.get("access_token");
 
+  const navigate = useNavigate();
+
   useEffect(() => {
     if (messageContainerRef.current) {
       messageContainerRef.current.scrollTop =
@@ -32,7 +34,9 @@ function Room() {
   }, [messages]);
 
   useEffect(() => {
-    const socket = new WebSocket("ws://127.0.0.1:3000/ws");
+    const socket = new WebSocket(
+      "wss://telesync-backend-production.up.railway.app/ws"
+    );
     wsRef.current = socket;
 
     socket.onopen = () => {
@@ -84,6 +88,24 @@ function Room() {
             { username: data.username, id: data.user_id, video: false },
             ...data.participants,
           ]);
+          break;
+
+        case "host-left":
+          setHost({
+            id: data.host,
+            username: data.username,
+            video: false,
+            screen: false,
+          });
+          setParticipants((prev) =>
+            prev.filter((participant) => participant.id.$oid !== data.host.$oid)
+          );
+          break;
+
+        case "participant-left":
+          setParticipants((prev) =>
+            prev.filter((participant) => participant.id.$oid !== data.user.$oid)
+          );
           break;
 
         case "offer":
@@ -656,6 +678,13 @@ function Room() {
     setMessageOpen((prev) => !prev);
   };
 
+  const handleLeaveRoom = () => {
+    sendMessage("leave-room", { code, user_id: user.id });
+    wsRef.current.close();
+    wsRef.current = null;
+    navigate("/");
+  };
+
   return user ? (
     <div className="bg-primary-bg h-screen w-screen overflow-hidden">
       {/* */}
@@ -840,6 +869,12 @@ function Room() {
               onClick={toggleMessages}
             >
               {messageOpen ? "Participants" : "Messages"}
+            </button>
+            <button
+              className={`p-2 rounded-full  border border-input-border text-secondary-text`}
+              onClick={handleLeaveRoom}
+            >
+              Leave
             </button>
           </div>
         </div>

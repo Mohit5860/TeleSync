@@ -44,13 +44,16 @@ export default function Register() {
 
     try {
       // making a fetch request
-      const response = await fetch(`http://127.0.0.1:3000/auth/register`, {
-        method: "post",
-        body: data,
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      const response = await fetch(
+        `https://telesync-backend-production.up.railway.app/auth/register`,
+        {
+          method: "post",
+          body: data,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       const result = await response.json();
 

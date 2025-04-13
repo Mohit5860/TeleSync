@@ -145,6 +145,25 @@ struct VideoResponse {
     host: bool,
 }
 
+#[derive(Deserialize)]
+struct LeaveRoomData {
+    code: String,
+    user_id: ObjectId,
+}
+
+#[derive(Serialize)]
+struct HostLeftresponse {
+    message_type: String,
+    host: ObjectId,
+    username: String,
+}
+
+#[derive(Serialize)]
+struct ParticipantLeft {
+    message_type: String,
+    user: ObjectId,
+}
+
 pub async fn handler(ws: WebSocketUpgrade, State(state): State<SharedState>) -> Response {
     ws.on_upgrade(|socket| handle_socket(socket, state))
 }
@@ -681,6 +700,128 @@ async fn handle_rooms(
                                 }
                             }
 
+                            "leave-room" => {
+                                let data: LeaveRoomData =
+                                    match serde_json::from_value(json["data"].clone()) {
+                                        Ok(d) => d,
+                                        Err(_) => {
+                                            println!("err");
+                                            continue;
+                                        }
+                                    };
+
+                                let room: Room = match Database::get_room_by_code(
+                                    db.clone(),
+                                    &data.code,
+                                )
+                                .await
+                                {
+                                    Ok(Some(room)) => room,
+                                    _ => continue,
+                                };
+
+                                let response_text: String;
+
+                                if data.user_id == room.host_id {
+                                    if room.participants_id.len() == 0 {
+                                        match Database::delete_room(db.clone(), &data.code).await {
+                                            Ok(_) => println!("Room deleted"),
+                                            Err(_) => continue,
+                                        };
+                                        continue;
+                                    }
+                                    let user_id = room.participants_id[0];
+                                    match Database::remove_participant_from_room(
+                                        db.clone(),
+                                        &data.code,
+                                        user_id,
+                                    )
+                                    .await
+                                    {
+                                        Ok(_) => println!("Participant removed"),
+                                        Err(_) => continue,
+                                    };
+                                    match Database::update_host_id(db.clone(), &data.code, user_id)
+                                        .await
+                                    {
+                                        Ok(_) => println!("Host changed"),
+                                        Err(_) => continue,
+                                    };
+                                    let user: User =
+                                        match Database::get_user_by_id(db.clone(), user_id).await {
+                                            Ok(Some(user)) => user,
+                                            _ => continue,
+                                        };
+                                    let response = HostLeftresponse {
+                                        message_type: "host-left".to_string(),
+                                        host: user_id,
+                                        username: user.username,
+                                    };
+
+                                    response_text = serde_json::to_string(&response).unwrap();
+                                } else {
+                                    match Database::remove_participant_from_room(
+                                        db.clone(),
+                                        &data.code,
+                                        data.user_id,
+                                    )
+                                    .await
+                                    {
+                                        Ok(_) => println!("Participant removed"),
+                                        Err(_) => continue,
+                                    };
+
+                                    let response = ParticipantLeft {
+                                        message_type: "participant-left".to_string(),
+                                        user: data.user_id,
+                                    };
+
+                                    response_text = serde_json::to_string(&response).unwrap();
+                                }
+
+                                let user_sockets = ws_state.user_sockets.lock().await.clone();
+
+                                for participant in &room.participants_id {
+                                    if let Some(sender_id) = user_sockets.get(&participant) {
+                                        let sender_arc = {
+                                            let sockets = ws_state.sockets.lock().await;
+                                            sockets.get(sender_id).cloned()
+                                        };
+
+                                        if let Some(sender_arc) = sender_arc {
+                                            let mut sender = sender_arc.lock().await;
+                                            if let Err(err) = sender
+                                                .send(Message::Text(response_text.clone().into()))
+                                                .await
+                                            {
+                                                eprintln!(
+                                                    "Failed to send message to user {}: {}",
+                                                    sender_id, err
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if let Some(sender_id) = user_sockets.get(&room.host_id) {
+                                    let sender_arc = {
+                                        let sockets = ws_state.sockets.lock().await;
+                                        sockets.get(sender_id).cloned()
+                                    };
+
+                                    if let Some(sender_arc) = sender_arc {
+                                        let mut sender = sender_arc.lock().await;
+                                        if let Err(err) =
+                                            sender.send(Message::Text(response_text.into())).await
+                                        {
+                                            eprintln!(
+                                                "Failed to send message to user {}: {}",
+                                                sender_id, err
+                                            );
+                                        }
+                                    }
+                                }
+                            }
                             _ => continue,
                         }
                     }

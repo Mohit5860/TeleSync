@@ -21,14 +21,17 @@ function App() {
       });
 
       try {
-        const response = await fetch(`http://127.0.0.1:3000/room/create`, {
-          method: "post",
-          body: data,
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-        });
+        const response = await fetch(
+          `https://telesync-backend-production.up.railway.app/room/create`,
+          {
+            method: "post",
+            body: data,
+            headers: {
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+          }
+        );
 
         const result = await response.json();
 
