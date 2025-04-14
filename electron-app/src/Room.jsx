@@ -128,7 +128,10 @@ function Room() {
           break;
 
         case "mouse-move":
-          window.electronAPI.sendMouseMove({ x: data.x, y: data.y });
+          
+    const x = data.x * window.innerWidth;
+    const y = data.y * window.innerHeight;
+          window.electronAPI.sendMouseMove({ x, y});
           break;
 
         case "message":
@@ -655,11 +658,7 @@ function Room() {
 
     let x = (e.clientX - rect.left) / rect.width;
     let y = (e.clientY - rect.top) / rect.height;
-
-    x = x * window.innerWidth;
-    y = y * window.innerHeight;
-
-    sendMessage("mouse-move", { x, y, to: id });
+   sendMessage("mouse-move", { x, y, to: id });
   };
 
   const handleSendMessage = () => {
