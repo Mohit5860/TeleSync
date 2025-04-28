@@ -35,8 +35,8 @@ function Room() {
 
   useEffect(() => {
     const socket = new WebSocket(
-      //"wss://telesync-backend-production.up.railway.app/ws"
-      "ws://127.0.0.1:3000/ws"
+      "wss://telesync-backend-production.up.railway.app/ws"
+      //"ws://127.0.0.1:3000/ws"
     );
     wsRef.current = socket;
 
