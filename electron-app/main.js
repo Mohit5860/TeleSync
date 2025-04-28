@@ -1,7 +1,7 @@
 import { app, BrowserWindow, desktopCapturer, ipcMain } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
-import {spawn, exec } from "child_process";
+import { spawn, exec } from "child_process";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 let mainWindow;
@@ -27,7 +27,6 @@ app.whenReady().then(() => {
     },
   });
 
-
   const py = spawn("python", ["mouse.py"]);
   ipcMain.handle("DESKTOP_CAPTURER_GET_SOURCES", handleGetSources);
 
@@ -43,8 +42,13 @@ app.whenReady().then(() => {
     //   }
     //   console.log(`Mouse moved to (${x}, ${y}): ${stdout}`);
     // });
-    py.stdin.write(`${x},${y}\n`);
+    py.stdin.write(`move,${x},${y}\n`);
     console.log(`Mouse moved to (${x}, ${y})`);
+  });
+
+  ipcMain.on("key_press", (event, { key }) => {
+    py.stdin.write(`key,${key}\n`);
+    console.log("key-press", key);
   });
 
   mainWindow.loadURL("http://localhost:5173");

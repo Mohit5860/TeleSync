@@ -22,7 +22,8 @@ function App() {
 
       try {
         const response = await fetch(
-          `https://telesync-backend-production.up.railway.app/room/create`,
+          //`https://telesync-backend-production.up.railway.app/room/create`,
+          `http://127.0.0.1:3000/room/create`,
           {
             method: "post",
             body: data,
@@ -59,7 +60,7 @@ function App() {
   return (
     <div className="h-screen flex flex-col">
       <div className="flex justify-between px-8 py-4">
-        <h1 className="text-3xl font-medium text-gray-600">ScreenSync</h1>
+        <h1 className="text-3xl font-medium text-gray-600">TeleSync</h1>
         {loggedIn ? (
           <button
             className="px-6 py-2 text-lg font-medium text-gray-600 hover:text-indigo-800 transition duration-300 ease-in-out"
@@ -79,7 +80,7 @@ function App() {
 
       <div className="flex flex-col justify-center h-full px-4 items-center">
         <h2 className="text-4xl font-semibold text-gray-600 mb-6">
-          Welcome to ScreenSync
+          Welcome to TeleSync
         </h2>
         <p className="text-lg text-gray-6003 mb-8 max-w-lg text-center">
           Create or join rooms to share your screen with others. It's simple and

@@ -31,17 +31,15 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const response = await fetch(
-        `https://telesync-backend-production.up.railway.app/auth/login`,
-        {
-          method: "post",
-          body: data,
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-        }
-      );
+      //https://telesync-backend-production.up.railway.app/auth/login
+      const response = await fetch(`http://127.0.0.1:3000/auth/login`, {
+        method: "post",
+        body: data,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+      });
 
       const result = await response.json();
 

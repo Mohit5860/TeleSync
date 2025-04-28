@@ -1,29 +1,40 @@
-# import pyautogui
-# import sys
-
-# x = float(sys.argv[1])
-# y = float(sys.argv[2])
-# x = int(x)
-# y = int(y)
-# pyautogui.moveTo(x, y)
-# print(f"Mouse moved to ({x}, {y})")
-
-
 import pyautogui
 import sys
 
-# Disable the fail-safe feature (moving to the corner of the screen won't stop the script)
+# Disable the fail-safe feature
 pyautogui.FAILSAFE = False
 
-# Keep the server running and listen for coordinates
+# Keep the server running and listen for commands
 for line in sys.stdin:
     try:
-        # Get coordinates (x, y) passed from Electron
-        x_str, y_str = line.strip().split(",")
-        x = float(x_str)
-        y = float(y_str)
-        
-        # Move the mouse to the specified coordinates
-        pyautogui.moveTo(x, y)
+        # Parse the incoming command
+        parts = line.strip().split(",")
+
+        command = parts[0]
+
+        if command == "move":
+            # Move the mouse to (x, y)
+            x = float(parts[1])
+            y = float(parts[2])
+            pyautogui.moveTo(x, y)
+
+        elif command == "click":
+            # Perform a mouse click
+            button = parts[1] if len(parts) > 1 else "left"  # Default to left click
+            pyautogui.click(button=button)
+
+        elif command == "keypress":
+            # Press a key
+            key = parts[1]
+            pyautogui.press(key)
+
+        elif command == "type":
+            # Type a full string
+            text = ",".join(parts[1:])  # In case the text itself has commas
+            pyautogui.typewrite(text)
+
+        else:
+            print(f"Unknown command: {command}")
+
     except Exception as e:
         print(f"Error: {e}")
