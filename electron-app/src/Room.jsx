@@ -10,7 +10,6 @@ function Room() {
   const [participants, setParticipants] = useState([]);
   const [remoteVideos, setRemoteVideos] = useState([]);
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
   const [sharingScreen, setSharingScreen] = useState(false);
   const [micOn, setMicOn] = useState(false);
   const [videoOn, setVideoOn] = useState(false);
@@ -20,7 +19,6 @@ function Room() {
   const [showPopUp, setShowPopUp] = useState(null);
   const [popUpData, setPopUpData] = useState({});
 
-  const messageContainerRef = useRef(null);
   const peersRef = useRef({});
   const localVideoRef = useRef(null);
   const wsRef = useRef(null);
@@ -32,8 +30,8 @@ function Room() {
 
   useEffect(() => {
     const socket = new WebSocket(
-      //"wss://telesync-backend-production.up.railway.app/ws"
-      "ws://127.0.0.1:3000/ws"
+      "wss://telesync-backend-production.up.railway.app/ws"
+      //"ws://127.0.0.1:3000/ws"
     );
     wsRef.current = socket;
 
@@ -695,18 +693,6 @@ function Room() {
     sendMessage("mouse-click", { to: id });
   };
 
-  const handleSendMessage = () => {
-    if (input.trim()) {
-      sendMessage("message", {
-        message: input.trim(),
-        username: user.username,
-        id: user.id,
-        code,
-      });
-      setInput("");
-    }
-  };
-
   const toggleMessages = () => {
     setMessageOpen((prev) => !prev);
   };
@@ -1046,13 +1032,23 @@ function Room() {
             </div>
           ) : (
             <div className="rounded-lg h-full">
-              <Messages messages={messages} />
+              <Messages
+                messages={messages}
+                sendMessage={sendMessage}
+                user={user}
+                code={code}
+              />
             </div>
           )}
         </div>
 
         <div className="rounded-lg flex-1 hidden lg:block">
-          <Messages messages={messages} handleSendMessage={handleSendMessage} />
+          <Messages
+            messages={messages}
+            sendMessage={sendMessage}
+            user={user}
+            code={code}
+          />
         </div>
       </div>
     </div>

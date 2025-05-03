@@ -1,12 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 
-function Messages({ messages, handleSendMessage }) {
+function Messages({ messages, sendMessage, user, code }) {
+  const messageContainerRef = useRef(null);
+  const [input, setInput] = useState("");
+
   useEffect(() => {
     if (messageContainerRef.current) {
       messageContainerRef.current.scrollTop =
         messageContainerRef.current.scrollHeight;
     }
   }, [messages]);
+
+  const handleSendMessage = () => {
+    if (input.trim()) {
+      sendMessage("message", {
+        message: input.trim(),
+        username: user.username,
+        id: user.id,
+        code,
+      });
+      setInput("");
+    }
+  };
+
   return (
     <>
       <h1 className="p-2 text-center font-bold text-secondary-text text-2xl bg-secondary-bg rounded-t-lg">
