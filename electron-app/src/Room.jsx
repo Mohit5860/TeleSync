@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Cookies from "js-cookie";
+import Messages from "./components/Messages";
 
 function Room() {
   const [host, setHost] = useState(null);
@@ -15,6 +16,9 @@ function Room() {
   const [videoOn, setVideoOn] = useState(false);
   const [localStream, setLocalStream] = useState(null);
   const [messageOpen, setMessageOpen] = useState(true);
+  const [allowedAccess, setAllowedAccess] = useState(null);
+  const [showPopUp, setShowPopUp] = useState(null);
+  const [popUpData, setPopUpData] = useState({});
 
   const messageContainerRef = useRef(null);
   const peersRef = useRef({});
@@ -27,16 +31,9 @@ function Room() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (messageContainerRef.current) {
-      messageContainerRef.current.scrollTop =
-        messageContainerRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  useEffect(() => {
     const socket = new WebSocket(
-      "wss://telesync-backend-production.up.railway.app/ws"
-      //"ws://127.0.0.1:3000/ws"
+      //"wss://telesync-backend-production.up.railway.app/ws"
+      "ws://127.0.0.1:3000/ws"
     );
     wsRef.current = socket;
 
@@ -101,12 +98,18 @@ function Room() {
           setParticipants((prev) =>
             prev.filter((participant) => participant.id.$oid !== data.host.$oid)
           );
+          if (peersRef.current) {
+            delete peersRef.current[data.host.$oid];
+          }
           break;
 
         case "participant-left":
           setParticipants((prev) =>
             prev.filter((participant) => participant.id.$oid !== data.user.$oid)
           );
+          if (peersRef.current) {
+            delete peersRef.current[data.user.$oid];
+          }
           break;
 
         case "offer":
@@ -136,6 +139,10 @@ function Room() {
 
         case "key-press":
           window.electronAPI.sendKey({ key: data.key });
+          break;
+
+        case "mouse-click":
+          window.electronAPI.sendMouseClick();
           break;
 
         case "message":
@@ -185,6 +192,20 @@ function Room() {
 
         case "screen-sharing-stopped":
           setHost((prev) => ({ ...prev, screen: false }));
+          break;
+
+        case "request-access":
+          setShowPopUp(true);
+          setPopUpData({ username: data.username, userId: data.user_id });
+          break;
+
+        case "allowed-access":
+          alert(`Access allowed to ${data.username}`);
+          setAllowedAccess(data.user_id);
+          break;
+
+        case "rejected-access":
+          alert(`Access rejected`);
           break;
 
         default:
@@ -670,6 +691,10 @@ function Room() {
     sendMessage("key-press", { key: e.key, to: id });
   };
 
+  const handleClick = (e, id) => {
+    sendMessage("mouse-click", { to: id });
+  };
+
   const handleSendMessage = () => {
     if (input.trim()) {
       sendMessage("message", {
@@ -690,11 +715,71 @@ function Room() {
     sendMessage("leave-room", { code, user_id: user.id });
     wsRef.current.close();
     wsRef.current = null;
+    peersRef;
     navigate("/");
+  };
+
+  const handleAccess = () => {
+    if (allowedAccess) {
+      if (allowedAccess.$oid === user.id.$oid) setAllowedAccess(null);
+      else alert("Someone is already accessing the host screen");
+      return;
+    }
+    sendMessage("request-access", {
+      to: host.id,
+      from: user.id,
+      username: user.username,
+    });
+  };
+
+  const handleAllow = () => {
+    sendMessage("allowedAccess", {
+      user_id: popUpData.userId,
+      username: popUpData.username,
+      code,
+    });
+    setAllowedAccess(popUpData.userId);
+    setShowPopUp(false);
+  };
+
+  const handleReject = () => {
+    sendMessage("rejectedAccess", {
+      user_id: popUpData.userId,
+      username: popUpData.username,
+      code,
+    });
+    setShowPopUp(false);
   };
 
   return user ? (
     <div className="bg-primary-bg h-screen w-screen overflow-hidden">
+      {showPopUp && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-lg p-8 max-w-sm w-full">
+            <h2 className="text-lg font-semibold mb-4 text-gray-800">
+              Allow Access
+            </h2>
+            <p className="text-gray-600 mb-6">
+              Do you want to allow access of screen to {popUpData.username}?
+            </p>
+            <div className="flex justify-end space-x-4">
+              <button
+                onClick={handleReject}
+                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+              >
+                Reject
+              </button>
+              <button
+                onClick={handleAllow}
+                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+              >
+                Allow
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* */}
       <div className="flex justify-between">
         <h1 className="font-semibold text-3xl p-3 text-secondary-text">
@@ -782,7 +867,11 @@ function Room() {
                       (r) => r.id.$oid === host.id.$oid
                     );
                     if (remote && (host.video || host.screen)) {
-                      if (host.screen) {
+                      if (
+                        host.screen &&
+                        allowedAccess &&
+                        allowedAccess.$oid === user.id.$oid
+                      ) {
                         return (
                           <video
                             autoPlay
@@ -796,6 +885,7 @@ function Room() {
                             tabIndex={0}
                             onMouseMove={(e) => handleMouseMove(e, host.id)}
                             onKeyDown={(e) => handleKeyPress(e, host.id)}
+                            onClick={(e) => handleClick(e, host.id)}
                           />
                         );
                       }
@@ -889,6 +979,17 @@ function Room() {
                 {sharingScreen ? "Stop Screen Share" : "Screen Share"}
               </button>
             )}
+
+            {host.id.$oid !== user.id.$oid && host.screen && (
+              <button
+                className={`p-2 rounded-full  border border-input-border text-secondary-text`}
+                onClick={handleAccess}
+              >
+                {allowedAccess?.$oid === user.id.$oid
+                  ? "Accessing"
+                  : "Ask access"}
+              </button>
+            )}
             <button
               className={`p-2 rounded-full  border border-input-border text-secondary-text lg:hidden`}
               onClick={toggleMessages}
@@ -945,85 +1046,13 @@ function Room() {
             </div>
           ) : (
             <div className="rounded-lg h-full">
-              <h1 className="p-2 text-center font-bold text-secondary-text text-2xl bg-secondary-bg rounded-t-lg">
-                {" "}
-                MESSAGES{" "}
-              </h1>
-              <div className="flex flex-col h-[85%]">
-                <div
-                  ref={messageContainerRef}
-                  className="flex-grow p-2 overflow-y-auto mb-2 bg-secondary-bg rounded-b-lg"
-                >
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className="bg-message-bg p-2 m-2 rounded-lg"
-                    >
-                      <h3 className="text-secondary-text text-lg font-semibold">
-                        {message.username}
-                      </h3>
-                      <p className="text-message-text">{message.text}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex">
-                  <input
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    className="py-2 w-full px-1 rounded-l-lg bg-secondary-bg text-input-text border border-input-border placeholder-input-placeholder focus:border-input-focus-border focus:text-input-focus-text focus:outline-none"
-                    placeholder="Type a message..."
-                  />
-                  <button
-                    onClick={handleSendMessage}
-                    className=" px-1 bg-secondary-bg border border-input-border text-message-text rounded-r-lg"
-                  >
-                    Send
-                  </button>
-                </div>
-              </div>
+              <Messages messages={messages} />
             </div>
           )}
         </div>
 
         <div className="rounded-lg flex-1 hidden lg:block">
-          <h1 className="p-2 text-center font-bold text-secondary-text text-2xl bg-secondary-bg rounded-t-lg">
-            {" "}
-            MESSAGES{" "}
-          </h1>
-          <div className="flex flex-col h-[85%]">
-            <div
-              ref={messageContainerRef}
-              className="flex-grow p-2 overflow-y-auto mb-2 bg-secondary-bg rounded-b-lg"
-            >
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className="bg-message-bg p-2 m-2 rounded-lg"
-                >
-                  <h3 className="text-secondary-text text-lg font-semibold">
-                    {message.username}
-                  </h3>
-                  <p className="text-message-text">{message.text}</p>
-                </div>
-              ))}
-            </div>
-            <div className="flex">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                className="py-2 w-full px-1 rounded-l-lg bg-secondary-bg text-input-text border border-input-border placeholder-input-placeholder focus:border-input-focus-border focus:text-input-focus-text focus:outline-none"
-                placeholder="Type a message..."
-              />
-              <button
-                onClick={handleSendMessage}
-                className=" px-1 bg-secondary-bg border border-input-border text-message-text rounded-r-lg"
-              >
-                Send
-              </button>
-            </div>
-          </div>
+          <Messages messages={messages} handleSendMessage={handleSendMessage} />
         </div>
       </div>
     </div>

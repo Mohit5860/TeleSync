@@ -47,8 +47,13 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on("key_press", (event, { key }) => {
-    py.stdin.write(`key,${key}\n`);
+    py.stdin.write(`keypress,${key}\n`);
     console.log("key-press", key);
+  });
+
+  ipcMain.on("mouse_click", (event) => {
+    py.stdin.write(`click\n`);
+    console.log("mouse clicked");
   });
 
   mainWindow.loadURL("http://localhost:5173");
