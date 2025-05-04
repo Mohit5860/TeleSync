@@ -52,7 +52,7 @@ function Room() {
           setHost({
             username: data.username,
             id: data.user_id,
-            screen: true,
+            screen: false,
             video: false,
           });
           setUser({ username: data.username, id: data.user_id });
@@ -677,11 +677,31 @@ function Room() {
   };
 
   const handleMouseMove = (e, id) => {
-    const rect = e.target.getBoundingClientRect();
+    const video = e.target;
+    const rect = video.getBoundingClientRect();
 
-    let x = (e.clientX - rect.left) / rect.width;
-    let y = (e.clientY - rect.top) / rect.height;
-    sendMessage("mouse-move", { x, y, to: id });
+    const videoAspect = video.videoWidth / video.videoHeight;
+    const containerAspect = rect.width / rect.height;
+
+    let displayWidth = rect.width;
+    let displayHeight = rect.height;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (videoAspect > containerAspect) {
+      displayHeight = rect.width / videoAspect;
+      offsetY = (rect.height - displayHeight) / 2;
+    } else {
+      displayWidth = rect.height * videoAspect;
+      offsetX = (rect.width - displayWidth) / 2;
+    }
+
+    const x = (e.clientX - rect.left - offsetX) / displayWidth;
+    const y = (e.clientY - rect.top - offsetY) / displayHeight;
+
+    if (x >= 0 && x <= 1 && y >= 0 && y <= 1) {
+      sendMessage("mouse-move", { x, y, to: id });
+    }
   };
 
   const handleKeyPress = (e, id) => {
@@ -719,7 +739,7 @@ function Room() {
   };
 
   const handleAllow = () => {
-    sendMessage("allowedAccess", {
+    sendMessage("allowed-access", {
       user_id: popUpData.userId,
       username: popUpData.username,
       code,
@@ -729,7 +749,7 @@ function Room() {
   };
 
   const handleReject = () => {
-    sendMessage("rejectedAccess", {
+    sendMessage("rejected-access", {
       user_id: popUpData.userId,
       username: popUpData.username,
       code,
