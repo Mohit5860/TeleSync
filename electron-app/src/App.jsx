@@ -22,8 +22,8 @@ function App() {
 
       try {
         const response = await fetch(
-          `https://telesync-backend-production.up.railway.app/room/create`,
-          //`http://127.0.0.1:3000/room/create`,
+          //`https://telesync-backend-production.up.railway.app/room/create`,
+          `http://127.0.0.1:3000/room/create`,
           {
             method: "post",
             body: data,

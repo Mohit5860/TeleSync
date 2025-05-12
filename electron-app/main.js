@@ -1,4 +1,4 @@
-import { app, BrowserWindow, desktopCapturer, ipcMain } from "electron";
+import { app, BrowserWindow, desktopCapturer, ipcMain, screen } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
 import { spawn, exec } from "child_process";
@@ -42,6 +42,11 @@ app.whenReady().then(() => {
     //   }
     //   console.log(`Mouse moved to (${x}, ${y}): ${stdout}`);
     // });
+    const primary = screen.getPrimaryDisplay();
+    const height = primary.size.height;
+    const width = primary.size.width;
+    x = Math.max(0, Math.min(1, x)) * width;
+    y = Math.max(0, Math.min(1, y)) * height;
     py.stdin.write(`move,${x},${y}\n`);
     console.log(`Mouse moved to (${x}, ${y})`);
   });

@@ -25,9 +25,9 @@ function Messages({ messages, sendMessage, user, code }) {
 
   return (
     <>
-      <h1 className="p-2 text-center font-bold text-secondary-text text-2xl bg-secondary-bg rounded-t-lg">
+      <h1 className="p-2 text-center font-semibold text-2xl bg-secondary-bg rounded-t-lg">
         {" "}
-        MESSAGES{" "}
+        Messages{" "}
       </h1>
       <div className="flex flex-col h-[85%]">
         <div
