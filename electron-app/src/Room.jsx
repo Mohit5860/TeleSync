@@ -30,8 +30,8 @@ function Room() {
 
   useEffect(() => {
     const socket = new WebSocket(
-      //"wss://telesync-backend-production.up.railway.app/ws"
-      "ws://127.0.0.1:3000/ws"
+      "wss://telesync-backend-production.up.railway.app/ws"
+      //"ws://127.0.0.1:3000/ws"
     );
     wsRef.current = socket;
 
@@ -679,7 +679,7 @@ function Room() {
 
     let x = (e.clientX - rect.left) / rect.width;
     let y = (e.clientY - rect.top) / rect.height;
-    //sendMessage("mouse-move", { x, y, to: id });
+    sendMessage("mouse-move", { x, y, to: id });
   };
 
   const handleKeyPress = (e, id) => {
@@ -687,7 +687,7 @@ function Room() {
       e.preventDefault();
     }
     console.log(e.key);
-    //sendMessage("key-press", { key: e.key, to: id });
+    sendMessage("key-press", { key: e.key, to: id });
   };
 
   const handleClick = (e, id) => {

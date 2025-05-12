@@ -33,8 +33,8 @@ export default function Login() {
     try {
       //https://telesync-backend-production.up.railway.app/auth/login
       const response = await fetch(
-        //`https://telesync-backend-production.up.railway.app/auth/login`,
-        "http://127.0.0.1:3000/auth/login",
+        `https://telesync-backend-production.up.railway.app/auth/login`,
+        //"http://127.0.0.1:3000/auth/login",
         {
           method: "post",
           body: data,
