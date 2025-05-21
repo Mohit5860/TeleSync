@@ -323,7 +323,7 @@ function Room() {
 
       videoStream.getVideoTracks().forEach((track) => stream.addTrack(track));
 
-      if (localVideoRef.current) {
+      if (videoOn) {
         const videoTrack = localVideoRef.current.getVideoTracks()[0];
         if (videoTrack) {
           videoTrack.stop();
@@ -599,7 +599,7 @@ function Room() {
         video: true,
       });
 
-      if (localVideoRef.current) {
+      if (sharingScreen) {
         const videoTrack = localVideoRef.current.getVideoTracks()[0];
         if (videoTrack) {
           videoTrack.stop();
@@ -916,12 +916,45 @@ function Room() {
                   const remote = remoteVideos.find(
                     (r) => r.id.$oid === host.id.$oid
                   );
-                  if (remote && (host.video || host.screen)) {
-                    if (
-                      host.screen &&
-                      allowedAccess &&
-                      allowedAccess.$oid === user.id.$oid
-                    ) {
+                  if (remote) {
+                    if (host.video || host.screen) {
+                      if (
+                        host.screen &&
+                        allowedAccess &&
+                        allowedAccess.$oid === user.id.$oid
+                      ) {
+                        return (
+                          <>
+                            <video
+                              autoPlay
+                              playsInline
+                              muted={false}
+                              ref={(videoRef) => {
+                                if (videoRef) {
+                                  videoRef.srcObject = remote.stream;
+                                }
+                              }}
+                              className={`${
+                                allowedAccess?.$oid === user.id.$oid
+                                  ? "w-full h-full object-fill"
+                                  : "w-full h-full"
+                              }`}
+                              tabIndex={0}
+                              onMouseMove={(e) => handleMouseMove(e, host.id)}
+                              onKeyDown={(e) => handleKeyPress(e, host.id)}
+                              onClick={(e) => handleClick(e, host.id)}
+                            />
+                            <audio
+                              autoPlay
+                              ref={(audioRef) => {
+                                if (audioRef) {
+                                  audioRef.srcObject = remote.stream;
+                                }
+                              }}
+                            />
+                          </>
+                        );
+                      }
                       return (
                         <>
                           <video
@@ -933,15 +966,7 @@ function Room() {
                                 videoRef.srcObject = remote.stream;
                               }
                             }}
-                            className={`${
-                              allowedAccess?.$oid === user.id.$oid
-                                ? "w-full h-full object-fill"
-                                : "w-full h-full"
-                            }`}
-                            tabIndex={0}
-                            onMouseMove={(e) => handleMouseMove(e, host.id)}
-                            onKeyDown={(e) => handleKeyPress(e, host.id)}
-                            onClick={(e) => handleClick(e, host.id)}
+                            className="w-full h-full"
                           />
                           <audio
                             autoPlay
@@ -955,27 +980,14 @@ function Room() {
                       );
                     }
                     return (
-                      <>
-                        <video
-                          autoPlay
-                          playsInline
-                          muted={false}
-                          ref={(videoRef) => {
-                            if (videoRef) {
-                              videoRef.srcObject = remote.stream;
-                            }
-                          }}
-                          className="w-full h-full"
-                        />
-                        <audio
-                          autoPlay
-                          ref={(audioRef) => {
-                            if (audioRef) {
-                              audioRef.srcObject = remote.stream;
-                            }
-                          }}
-                        />
-                      </>
+                      <audio
+                        autoPlay
+                        ref={(audioRef) => {
+                          if (audioRef) {
+                            audioRef.srcObject = remote.stream;
+                          }
+                        }}
+                      />
                     );
                   }
                   return <h1>{host.username}</h1>;
@@ -1008,33 +1020,44 @@ function Room() {
                         (r) => r.id.$oid === participant.id.$oid
                       );
 
-                      if (
-                        remote &&
-                        remote.stream.getVideoTracks().length &&
-                        participant.video
-                      ) {
+                      if (remote) {
+                        if (
+                          remote.stream.getVideoTracks().lenght &&
+                          participant.video
+                        ) {
+                          return (
+                            <>
+                              <video
+                                autoPlay
+                                playsInline
+                                muted={false}
+                                ref={(videoRef) => {
+                                  if (videoRef) {
+                                    videoRef.srcObject = remote.stream;
+                                  }
+                                }}
+                                className="w-full h-full"
+                              />
+                              <audio
+                                autoPlay
+                                ref={(audioRef) => {
+                                  if (audioRef) {
+                                    audioRef.srcObject = remote.stream;
+                                  }
+                                }}
+                              />
+                            </>
+                          );
+                        }
                         return (
-                          <>
-                            <video
-                              autoPlay
-                              playsInline
-                              muted={false}
-                              ref={(videoRef) => {
-                                if (videoRef) {
-                                  videoRef.srcObject = remote.stream;
-                                }
-                              }}
-                              className="w-full h-full"
-                            />
-                            <audio
-                              autoPlay
-                              ref={(audioRef) => {
-                                if (audioRef) {
-                                  audioRef.srcObject = remote.stream;
-                                }
-                              }}
-                            />
-                          </>
+                          <audio
+                            autoPlay
+                            ref={(audioRef) => {
+                              if (audioRef) {
+                                audioRef.srcObject = remote.stream;
+                              }
+                            }}
+                          />
                         );
                       }
                       return (
