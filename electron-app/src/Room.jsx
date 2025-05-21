@@ -81,7 +81,11 @@ function Room() {
           setUser({ username: data.username, id: data.user_id });
           setHost(data.host);
           setParticipants(() => [
-            { username: data.username, id: data.user_id, video: false },
+            {
+              username: data.username,
+              id: data.user_id,
+              video: false,
+            },
             ...data.participants,
           ]);
           break;
@@ -474,57 +478,40 @@ function Room() {
         if (videoTrack) {
           videoTrack.stop();
         }
+      }
+      localVideoRef.current = stream;
 
-        localVideoRef.current = stream;
+      if (user.id.$oid !== host.id.$oid) {
+        setPeerConnection(host.id, user.id);
 
-        Object.values(peersRef.current).forEach((peerConnection) => {
-          peerConnection.getSenders().forEach((sender) => {
-            if (sender.track.kind === "video") {
-              if (stream.getVideoTracks().length > 0) {
-                sender.replaceTrack(stream.getVideoTracks()[0]);
-              }
-            } else if (sender.track.kind === "audio") {
-              if (stream.getAudioTracks().length > 0) {
-                sender.replaceTrack(stream.getAudioTracks()[0]);
-              }
-            }
-          });
+        const offer = await peersRef.current[host.id.$oid].createOffer();
+        await peersRef.current[host.id.$oid].setLocalDescription(offer);
+        sendMessage("offer", {
+          item: offer,
+          user_id: user.id,
+          to: host.id,
         });
-      } else {
-        localVideoRef.current = stream;
+      }
 
-        if (user.id.$oid !== host.id.$oid) {
-          setPeerConnection(host.id, user.id);
+      participants.forEach((participant) => {
+        if (participant.id.$oid !== user.id.$oid) {
+          setPeerConnection(participant.id, user.id);
+        }
+      });
 
-          const offer = await peersRef.current[host.id.$oid].createOffer();
-          await peersRef.current[host.id.$oid].setLocalDescription(offer);
+      for (let participant of participants) {
+        if (participant.id.$oid !== user.id.$oid) {
+          const offer = await peersRef.current[
+            participant.id.$oid
+          ].createOffer();
+          await peersRef.current[participant.id.$oid].setLocalDescription(
+            offer
+          );
           sendMessage("offer", {
             item: offer,
             user_id: user.id,
-            to: host.id,
+            to: participant.id,
           });
-        }
-
-        participants.forEach((participant) => {
-          if (participant.id.$oid !== user.id.$oid) {
-            setPeerConnection(participant.id, user.id);
-          }
-        });
-
-        for (let participant of participants) {
-          if (participant.id.$oid !== user.id.$oid) {
-            const offer = await peersRef.current[
-              participant.id.$oid
-            ].createOffer();
-            await peersRef.current[participant.id.$oid].setLocalDescription(
-              offer
-            );
-            sendMessage("offer", {
-              item: offer,
-              user_id: user.id,
-              to: participant.id,
-            });
-          }
         }
       }
       setMicOn(true);
@@ -535,6 +522,10 @@ function Room() {
 
   const stopAudio = async () => {
     try {
+      if (localVideoRef.current) {
+        const tracks = localVideoRef.current.getAudioTracks();
+        tracks.forEach((track) => track.stop());
+      }
       if (sharingScreen || videoOn) {
         let stream;
         if (sharingScreen) {
@@ -916,7 +907,12 @@ function Room() {
                   const remote = remoteVideos.find(
                     (r) => r.id.$oid === host.id.$oid
                   );
-                  if (remote) {
+                  if (
+                    remote &&
+                    (host.video ||
+                      host.screen ||
+                      remote.stream.getAudioTracks().length)
+                  ) {
                     if (host.video || host.screen) {
                       if (
                         host.screen &&
@@ -980,14 +976,17 @@ function Room() {
                       );
                     }
                     return (
-                      <audio
-                        autoPlay
-                        ref={(audioRef) => {
-                          if (audioRef) {
-                            audioRef.srcObject = remote.stream;
-                          }
-                        }}
-                      />
+                      <>
+                        <audio
+                          autoPlay
+                          ref={(audioRef) => {
+                            if (audioRef) {
+                              audioRef.srcObject = remote.stream;
+                            }
+                          }}
+                        />
+                        <h1>{host.username}</h1>
+                      </>
                     );
                   }
                   return <h1>{host.username}</h1>;
@@ -1020,9 +1019,13 @@ function Room() {
                         (r) => r.id.$oid === participant.id.$oid
                       );
 
-                      if (remote) {
+                      if (
+                        remote &&
+                        (participant.video ||
+                          remote.stream.getAudioTracks().length)
+                      ) {
                         if (
-                          remote.stream.getVideoTracks().lenght &&
+                          remote.stream.getVideoTracks().length &&
                           participant.video
                         ) {
                           return (
@@ -1050,14 +1053,19 @@ function Room() {
                           );
                         }
                         return (
-                          <audio
-                            autoPlay
-                            ref={(audioRef) => {
-                              if (audioRef) {
-                                audioRef.srcObject = remote.stream;
-                              }
-                            }}
-                          />
+                          <>
+                            <audio
+                              autoPlay
+                              ref={(audioRef) => {
+                                if (audioRef) {
+                                  audioRef.srcObject = remote.stream;
+                                }
+                              }}
+                            />
+                            <h1 className="text-xl font-medium">
+                              {participant.username}
+                            </h1>
+                          </>
                         );
                       }
                       return (
