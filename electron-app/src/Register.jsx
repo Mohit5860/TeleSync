@@ -45,7 +45,7 @@ export default function Register() {
     try {
       // making a fetch request
       const response = await fetch(
-        `https://telesync-backend-production.up.railway.app/auth/register`,
+        `https://telesync-backend.onrender.com/auth/register`,
         {
           method: "post",
           body: data,

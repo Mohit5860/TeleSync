@@ -30,7 +30,7 @@ function Room() {
 
   useEffect(() => {
     const socket = new WebSocket(
-      "wss://telesync-backend-production.up.railway.app/ws"
+      "wss://telesync-backend.onrender.com/ws"
       //"ws://127.0.0.1:3000/ws"
     );
     wsRef.current = socket;
