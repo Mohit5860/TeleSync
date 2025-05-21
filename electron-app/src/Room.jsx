@@ -427,16 +427,136 @@ function Room() {
   };
 
   const toggleMic = async () => {
+    if (micOn) {
+      stopAudio();
+    } else {
+      startAudio();
+    }
+  };
+
+  const startAudio = async () => {
     try {
-      if (micOn) {
-        const tracks = localVideoRef.current.getAudioTracks();
-        tracks.forEach((track) => track.stop());
-      }
-      if (videoOn) {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: videoOn,
-          audio: !micOn,
+      let stream;
+      if (sharingScreen) {
+        const sources = await getScreenSources();
+        let videoStream;
+
+        if (sources && sources.length > 0) {
+          videoStream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              mandatory: {
+                chromeMediaSource: "desktop",
+                chromeMediaSourceId: sources[0].id,
+              },
+            },
+          });
+        }
+
+        stream = new MediaStream();
+
+        const audioStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false,
         });
+
+        audioStream.getAudioTracks().forEach((track) => stream.addTrack(track));
+        videoStream.getVideoTracks().forEach((track) => stream.addTrack(track));
+      } else {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: videoOn,
+        });
+      }
+
+      if (localVideoRef.current) {
+        const videoTrack = localVideoRef.current.getVideoTracks()[0];
+        if (videoTrack) {
+          videoTrack.stop();
+        }
+
+        localVideoRef.current = stream;
+
+        Object.values(peersRef.current).forEach((peerConnection) => {
+          peerConnection.getSenders().forEach((sender) => {
+            if (sender.track.kind === "video") {
+              if (stream.getVideoTracks().length > 0) {
+                sender.replaceTrack(stream.getVideoTracks()[0]);
+              }
+            } else if (sender.track.kind === "audio") {
+              if (stream.getAudioTracks().length > 0) {
+                sender.replaceTrack(stream.getAudioTracks()[0]);
+              }
+            }
+          });
+        });
+      } else {
+        localVideoRef.current = stream;
+
+        if (user.id.$oid !== host.id.$oid) {
+          setPeerConnection(host.id, user.id);
+
+          const offer = await peersRef.current[host.id.$oid].createOffer();
+          await peersRef.current[host.id.$oid].setLocalDescription(offer);
+          sendMessage("offer", {
+            item: offer,
+            user_id: user.id,
+            to: host.id,
+          });
+        }
+
+        participants.forEach((participant) => {
+          if (participant.id.$oid !== user.id.$oid) {
+            setPeerConnection(participant.id, user.id);
+          }
+        });
+
+        for (let participant of participants) {
+          if (participant.id.$oid !== user.id.$oid) {
+            const offer = await peersRef.current[
+              participant.id.$oid
+            ].createOffer();
+            await peersRef.current[participant.id.$oid].setLocalDescription(
+              offer
+            );
+            sendMessage("offer", {
+              item: offer,
+              user_id: user.id,
+              to: participant.id,
+            });
+          }
+        }
+      }
+      setMicOn(true);
+    } catch (err) {
+      console.error("Error while sarting audio: ", err);
+    }
+  };
+
+  const stopAudio = async () => {
+    try {
+      if (sharingScreen || videoOn) {
+        let stream;
+        if (sharingScreen) {
+          const sources = await getScreenSources();
+
+          if (sources && sources.length > 0) {
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: false,
+              video: {
+                mandatory: {
+                  chromeMediaSource: "desktop",
+                  chromeMediaSourceId: sources[0].id,
+                },
+              },
+            });
+          }
+        } else {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: true,
+          });
+        }
 
         localVideoRef.current = stream;
         setLocalStream(stream);
@@ -458,10 +578,9 @@ function Room() {
         localVideoRef.current = null;
         setLocalStream(null);
       }
-
-      setMicOn((prev) => !prev);
+      setMicOn(false);
     } catch (err) {
-      console.error("Error in toggling mic:", err);
+      console.error("Error while stopping audio: ", err);
     }
   };
 
@@ -898,12 +1017,12 @@ function Room() {
           </div>
 
           <div className="flex justify-center items-center space-x-4 pt-3 rounded-lg">
-            {/* <button
+            <button
               className={`p-2 rounded-full  border border-input-border text-secondary-text`}
               onClick={toggleMic}
             >
               {micOn ? "Mic On" : "Mic Off"}
-            </button> */}
+            </button>
             <button
               className={`p-2 rounded-full  border border-input-border text-secondary-text`}
               onClick={toggleVideo}
