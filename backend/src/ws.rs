@@ -86,6 +86,21 @@ struct RequestAcceptedResponseTOParticipants {
     host: Host,
 }
 
+#[derive(Serialize)]
+struct RoomNotFound {
+    message_type: String,
+}
+
+#[derive(Deserialize)]
+struct RequestRejectData {
+    user_id: ObjectId,
+}
+
+#[derive(Serialize)]
+struct RequestRejectResponse {
+    message_type: String,
+}
+
 #[derive(Deserialize)]
 struct RtcConnectionData {
     item: serde_json::Value,
@@ -276,7 +291,34 @@ async fn handle_rooms(
                                 .await
                                 {
                                     Ok(Some(room)) => room,
-                                    _ => continue,
+                                    _ => {
+                                        let response = RoomNotFound {
+                                            message_type: "room-not-found".to_string(),
+                                        };
+
+                                        let response_text =
+                                            serde_json::to_string(&response).unwrap();
+
+                                        let sender_arc = {
+                                            let sockets = ws_state.sockets.lock().await;
+                                            sockets.get(&socket_id).cloned()
+                                        };
+
+                                        if let Some(sender_arc) = sender_arc {
+                                            let mut sender = sender_arc.lock().await;
+                                            if let Err(err) = sender
+                                                .send(Message::Text(response_text.into()))
+                                                .await
+                                            {
+                                                eprintln!(
+                                                    "Failed to send 'room-not-found' message to user {}: {}",
+                                                    socket_id, err
+                                                );
+                                            }
+                                        }
+
+                                        continue;
+                                    }
                                 };
 
                                 let user: User =
@@ -470,6 +512,44 @@ async fn handle_rooms(
 
                                 println!("response sent")
                             }
+
+                            "request-rejected" => {
+                                let data: RequestRejectData =
+                                    match serde_json::from_value(json["data"].clone()) {
+                                        Ok(d) => d,
+                                        Err(_) => {
+                                            println!("err");
+                                            continue;
+                                        }
+                                    };
+
+                                let response: RequestRejectResponse = RequestRejectResponse {
+                                    message_type: "request-reject".to_string(),
+                                };
+                                let response_text = serde_json::to_string(&response).unwrap();
+
+                                let user_sockets = ws_state.user_sockets.lock().await.clone();
+
+                                if let Some(sender_id) = user_sockets.get(&data.user_id) {
+                                    let sender_arc = {
+                                        let sockets = ws_state.sockets.lock().await;
+                                        sockets.get(sender_id).cloned()
+                                    };
+
+                                    if let Some(sender_arc) = sender_arc {
+                                        let mut sender = sender_arc.lock().await;
+                                        if let Err(err) =
+                                            sender.send(Message::Text(response_text.into())).await
+                                        {
+                                            eprintln!(
+                                                "Failed to send message to user {}: {}",
+                                                sender_id, err
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+
                             "offer" | "answer" | "ice-candidate" => {
                                 let data: RtcConnectionData =
                                     match serde_json::from_value(json["data"].clone()) {
@@ -1077,7 +1157,7 @@ async fn handle_rooms(
                                     };
 
                                 let response: AccessResponse = AccessResponse {
-                                    message_type: "allowed-access".to_string(),
+                                    message_type: "rejected-access".to_string(),
                                     user_id: data.user_id,
                                     username: data.username,
                                 };

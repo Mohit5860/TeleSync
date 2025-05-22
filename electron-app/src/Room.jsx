@@ -56,7 +56,11 @@ function Room() {
             video: false,
           });
           setUser({ username: data.username, id: data.user_id });
-          //handleHost();
+          break;
+
+        case "room-not-found":
+          alert("No room with this code");
+          navigate("/");
           break;
 
         case "join-request":
@@ -89,6 +93,10 @@ function Room() {
             ...data.participants,
           ]);
           break;
+
+        case "request-reject":
+          alert("Join request rejected by host");
+          navigate("/");
 
         case "host-left":
           setHost({
@@ -229,20 +237,6 @@ function Room() {
       wsRef.current.send(JSON.stringify({ type, data: messageData }));
     } else {
       console.warn("WebSocket is not connected");
-    }
-  };
-
-  const handleHost = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: micOn,
-        video: videoOn,
-      });
-
-      localVideoRef.current = stream;
-      setLocalStream(stream);
-    } catch (err) {
-      console.error("Error while getting host media: ".err);
     }
   };
 
@@ -744,7 +738,6 @@ function Room() {
 
   const addRemoteVideo = (id, remoteStream) => {
     setRemoteVideos((prevVideos) => {
-      // Prevent duplicate entries
       prevVideos = prevVideos.filter((video) => video.id.$oid !== id.$oid);
       return [...prevVideos, { id, stream: remoteStream }];
     });
@@ -1184,339 +1177,11 @@ function Room() {
       </div>
     </div>
   ) : (
-    //   <div className="bg-primary-bg h-screen w-screen overflow-hidden">
-    //     {showPopUp && (
-    //       <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-    //         <div className="bg-white rounded-lg shadow-lg p-8 max-w-sm w-full">
-    //           <h2 className="text-lg font-semibold mb-4 text-gray-800">
-    //             Allow Access
-    //           </h2>
-    //           <p className="text-gray-600 mb-6">
-    //             Do you want to allow access of screen to {popUpData.username}?
-    //           </p>
-    //           <div className="flex justify-end space-x-4">
-    //             <button
-    //               onClick={handleReject}
-    //               className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-    //             >
-    //               Reject
-    //             </button>
-    //             <button
-    //               onClick={handleAllow}
-    //               className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-    //             >
-    //               Allow
-    //             </button>
-    //           </div>
-    //         </div>
-    //       </div>
-    //     )}
-
-    //     {/* */}
-    //     <div className="flex justify-between">
-    //       <h1 className="font-semibold text-3xl p-3 text-secondary-text">
-    //         TeleSync
-    //       </h1>
-    //       <div className="p-3 flex text-secondary-text">
-    //         <h1 className="text-xl p-2">
-    //           Room Code: {code} user: {user.username} host: {host.username}
-    //         </h1>
-    //       </div>
-    //     </div>
-
-    //     <div className="h-full flex">
-    //       {/* Participants */}
-    //       <div className=" hidden flex-1 px-10 py-4 bg-secondary-bg border rounded-lg shadow-lg h-[91%] lg:block">
-    //         <h1 className="text-secondary-text text-2xl font-bold mb-4 text-center">
-    //           PARTICIPANTS
-    //         </h1>
-    //         <div>
-    //           {joinRequests.map((request) => (
-    //             <div
-    //               key={request.id.$oid}
-    //               className="flex items-center justify-between mb-2"
-    //             >
-    //               <h1 className="text-secondary-text text-xl font-medium1">
-    //                 {request.username}
-    //               </h1>
-    //               <div>
-    //                 <button
-    //                   className="text-secondary-text bg-primary-bg p-2 mx-2 rounded-full  border border-input-border"
-    //                   onClick={() => acceptJoinRequest(request)}
-    //                 >
-    //                   Approve
-    //                 </button>
-    //                 <button
-    //                   className="text-secondary-text bg-primary-bg p-2 mx-2 rounded-full  border border-input-border"
-    //                   onClick={() => rejectJoinRequest(request)}
-    //                 >
-    //                   Reject
-    //                 </button>
-    //               </div>
-    //             </div>
-    //           ))}
-    //         </div>
-
-    //         <div className="flex justify-between items-center">
-    //           <h3 className="font-medium text-secondary-text text-xl">
-    //             {host.username}
-    //           </h3>
-    //           <h3 className="font-medium text-l text-red-300">host</h3>
-    //         </div>
-    //         {participants.length > 0 && (
-    //           <div>
-    //             {participants.map((participant) => (
-    //               <h3
-    //                 key={participant.id.$oid}
-    //                 className="font-medium text-secondary-text text-xl"
-    //               >
-    //                 {participant.username}
-    //               </h3>
-    //             ))}
-    //           </div>
-    //         )}
-    //       </div>
-    //       {/* Video Compartment */}
-    //       <div
-    //         className={
-    //           allowedAccess?.$oid === user.id.$oid ? "w-full" : "flex-3 h-full"
-    //         }
-    //       >
-    //         <div className="overflow-y-auto h-5/6 hide-scrollbar mx-1">
-    //           <div
-    //             className={
-    //               allowedAccess?.$oid === user.id.$oid
-    //                 ? "h-full mb-1"
-    //                 : "h-2/3 mb-1"
-    //             }
-    //           >
-    //             <div
-    //               className={`border bg-secondary-bg text-secondary-text flex justify-center items-center mx-2 ${
-    //                 allowedAccess?.$oid === user.id.$oid ? "h-full" : "h-full"
-    //               } rounded-none`}
-    //             >
-    //               {(sharingScreen || videoOn) && user.id.$oid === host.id.$oid ? (
-    //                 <video
-    //                   ref={(videoRef) => {
-    //                     if (videoRef) {
-    //                       videoRef.srcObject = localVideoRef.current;
-    //                     }
-    //                   }}
-    //                   autoPlay
-    //                   playsInline
-    //                   className="w-full h-auto rounded-lg"
-    //                 />
-    //               ) : (
-    //                 (() => {
-    //                   console.log(remoteVideos);
-    //                   const remote = remoteVideos.find(
-    //                     (r) => r.id.$oid === host.id.$oid
-    //                   );
-    //                   if (remote && (host.video || host.screen)) {
-    //                     if (
-    //                       host.screen &&
-    //                       allowedAccess &&
-    //                       allowedAccess.$oid === user.id.$oid
-    //                     ) {
-    //                       return (
-    //                         <video
-    //                           autoPlay
-    //                           playsInline
-    //                           ref={(videoRef) => {
-    //                             if (videoRef) {
-    //                               videoRef.srcObject = remote.stream;
-    //                             }
-    //                           }}
-    //                           className={`${
-    //                             allowedAccess?.$oid === user.id.$oid
-    //                               ? "w-full h-full object-fill"
-    //                               : "w-full h-auto"
-    //                           }`}
-    //                           tabIndex={0}
-    //                           onMouseMove={(e) => handleMouseMove(e, host.id)}
-    //                           onKeyDown={(e) => handleKeyPress(e, host.id)}
-    //                           onClick={(e) => handleClick(e, host.id)}
-    //                         />
-    //                       );
-    //                     }
-    //                     return (
-    //                       <video
-    //                         autoPlay
-    //                         playsInline
-    //                         ref={(videoRef) => {
-    //                           if (videoRef) {
-    //                             videoRef.srcObject = remote.stream;
-    //                           }
-    //                         }}
-    //                         className="w-full h-auto rounded-lg"
-    //                       />
-    //                     );
-    //                   }
-    //                   return <h1>{host.username}</h1>;
-    //                 })()
-    //               )}
-    //             </div>
-    //           </div>
-    //           <div className="flex flex-wrap h-1/3">
-    //             {participants.map((participant) => (
-    //               <div
-    //                 className="w-1/3 my-2 h-full border bg-secondary-bg text-secondary-text flex justify-center items-center mx-2 rounded-lg"
-    //                 key={participant.id.$oid}
-    //               >
-    //                 {(sharingScreen || videoOn) &&
-    //                 user.id.$oid !== host.id.$oid &&
-    //                 user.id.$oid === participant.id.$oid ? (
-    //                   <video
-    //                     ref={(videoRef) => {
-    //                       if (videoRef && localVideoRef.current) {
-    //                         videoRef.srcObject = localVideoRef.current;
-    //                       }
-    //                     }}
-    //                     autoPlay
-    //                     playsInline
-    //                     className="w-full h-auto rounded-lg"
-    //                   />
-    //                 ) : (
-    //                   (() => {
-    //                     const remote = remoteVideos.find(
-    //                       (r) => r.id.$oid === participant.id.$oid
-    //                     );
-
-    //                     if (
-    //                       remote &&
-    //                       remote.stream.getVideoTracks().length &&
-    //                       participant.video
-    //                     ) {
-    //                       return (
-    //                         <video
-    //                           autoPlay
-    //                           playsInline
-    //                           ref={(videoRef) => {
-    //                             if (videoRef) {
-    //                               videoRef.srcObject = remote.stream;
-    //                             }
-    //                           }}
-    //                           className="w-full h-auto rounded-lg"
-    //                         />
-    //                       );
-    //                     }
-    //                     return <h1>{participant.username}</h1>;
-    //                   })()
-    //                 )}
-    //               </div>
-    //             ))}
-    //           </div>
-    //         </div>
-
-    //         <div className="flex justify-center items-center space-x-4 pt-3 rounded-lg">
-    //           {/* <button
-    //             className={`p-2 rounded-full  border border-input-border text-secondary-text`}
-    //             onClick={toggleMic}
-    //           >
-    //             {micOn ? "Mic On" : "Mic Off"}
-    //           </button> */}
-    //           <button
-    //             className={`p-2 rounded-full  border border-input-border text-secondary-text`}
-    //             onClick={toggleVideo}
-    //           >
-    //             {videoOn ? "Video On" : "Video Off"}
-    //           </button>
-    //           {host.id.$oid === user.id.$oid && (
-    //             <button
-    //               className={`p-2 rounded-full  border border-input-border text-secondary-text`}
-    //               onClick={toggleScreenShare}
-    //             >
-    //               {sharingScreen ? "Stop Screen Share" : "Screen Share"}
-    //             </button>
-    //           )}
-
-    //           {host.id.$oid !== user.id.$oid && host.screen && (
-    //             <button
-    //               className={`p-2 rounded-full  border border-input-border text-secondary-text`}
-    //               onClick={handleAccess}
-    //             >
-    //               {allowedAccess?.$oid === user.id.$oid
-    //                 ? "Accessing"
-    //                 : "Ask access"}
-    //             </button>
-    //           )}
-    //           <button
-    //             className={`p-2 rounded-full  border border-input-border text-secondary-text lg:hidden`}
-    //             onClick={toggleMessages}
-    //           >
-    //             {messageOpen ? "Participants" : "Messages"}
-    //           </button>
-    //           <button
-    //             className={`p-2 rounded-full  border border-input-border text-secondary-text`}
-    //             onClick={handleLeaveRoom}
-    //           >
-    //             Leave
-    //           </button>
-    //         </div>
-    //       </div>
-
-    //       <div className="lg:hidden flex-1 h-full">
-    //         {!messageOpen ? (
-    //           <div className="p-4 bg-secondary-bg border rounded-lg shadow-lg h-[91%]">
-    //             <h1 className="text-secondary-text text-2xl font-bold mb-4 text-center">
-    //               PARTICIPANTS
-    //             </h1>
-    //             <div>
-    //               {joinRequests.map((request) => (
-    //                 <div key={request.id.$oid}>
-    //                   <h1 className="text-secondary-text">{request.username}</h1>
-    //                   <button
-    //                     className="text-secondary-text"
-    //                     onClick={() => acceptJoinRequest(request)}
-    //                   >
-    //                     Approve
-    //                   </button>
-    //                   <button
-    //                     className="text-secondary-text"
-    //                     onClick={() => rejectJoinRequest(request)}
-    //                   >
-    //                     Reject
-    //                   </button>
-    //                 </div>
-    //               ))}
-    //             </div>
-
-    //             {participants.length > 0 && (
-    //               <div>
-    //                 {participants.map((participant) => (
-    //                   <h3
-    //                     key={participant.id.$oid}
-    //                     className="font-medium text-secondary-text"
-    //                   >
-    //                     {participant.username}
-    //                   </h3>
-    //                 ))}
-    //               </div>
-    //             )}
-    //           </div>
-    //         ) : (
-    //           <div className="rounded-lg h-full">
-    //             <Messages
-    //               messages={messages}
-    //               sendMessage={sendMessage}
-    //               user={user}
-    //               code={code}
-    //             />
-    //           </div>
-    //         )}
-    //       </div>
-
-    //       <div className="rounded-lg flex-1 hidden lg:block">
-    //         <Messages
-    //           messages={messages}
-    //           sendMessage={sendMessage}
-    //           user={user}
-    //           code={code}
-    //         />
-    //       </div>
-    //     </div>
-    //   </div>
-    <h1>waiting</h1>
+    <div className="flex items-center justify-center h-screen">
+      <h1 className="text-2xl font-semibold text-center">
+        Please wait, you will enter the meeting shortly.
+      </h1>
+    </div>
   );
 }
 

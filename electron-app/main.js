@@ -31,17 +31,6 @@ app.whenReady().then(() => {
   ipcMain.handle("DESKTOP_CAPTURER_GET_SOURCES", handleGetSources);
 
   ipcMain.on("mouse_move", (event, { x, y }) => {
-    // exec(`python mouse.py ${x} ${y}`, (error, stdout, stderr) => {
-    //   if (error) {
-    //     console.error(`Error moving mouse: ${error.message}`);
-    //     return;
-    //   }
-    //   if (stderr) {
-    //     console.error(`stderr: ${stderr}`);
-    //     return;
-    //   }
-    //   console.log(`Mouse moved to (${x}, ${y}): ${stdout}`);
-    // });
     const primary = screen.getPrimaryDisplay();
     const height = primary.size.height;
     const width = primary.size.width;
