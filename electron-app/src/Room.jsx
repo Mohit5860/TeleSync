@@ -252,7 +252,7 @@ function Room() {
   };
 
   const rejectJoinRequest = (request) => {
-    sendMessage("reject-join", { user_id: request.id });
+    sendMessage("request-rejected", { user_id: request.id });
     setJoinRequests((prev) => prev.filter((r) => r.id !== request.id));
   };
 
